@@ -191,6 +191,19 @@ async def lifespan(app: FastAPI):
         _state["engine"] = engine
         _state["settings"] = settings
 
+        # Cross-modal trigger (imaging -> genomics)
+        from src.cross_modal import CrossModalTrigger
+
+        cross_modal = CrossModalTrigger(
+            collection_manager=manager,
+            embedder=embedder,
+            enabled=settings.CROSS_MODAL_ENABLED,
+        )
+        _state["cross_modal_trigger"] = cross_modal
+        logger.info(
+            f"Cross-modal trigger initialized (enabled={settings.CROSS_MODAL_ENABLED})"
+        )
+
         logger.info("All components initialized successfully")
     except Exception as e:
         logger.error(f"Initialization failed: {e}")

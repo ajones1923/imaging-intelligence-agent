@@ -21,6 +21,9 @@ openai>=1.0.0
 monai>=1.3.0
 torchvision>=0.15.0
 
+# CXR pathology classification (CheXpert-trained DenseNet-121)
+torchxrayvision>=1.2.0
+
 # Medical Imaging
 pydicom>=2.4.0
 highdicom>=0.22.0

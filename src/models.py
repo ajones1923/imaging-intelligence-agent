@@ -565,6 +565,21 @@ class ComparativeResult(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 
 
+class CrossModalResult(BaseModel):
+    """Result from cross-modal genomics query triggered by imaging findings.
+
+    When an imaging workflow produces a high-severity result (e.g.,
+    Lung-RADS 4A+), the cross-modal trigger automatically queries the
+    genomic_evidence Milvus collection for relevant cancer genomics
+    context, enriching imaging findings with molecular insights.
+    """
+    trigger_reason: str = ""
+    genomic_context: List[str] = Field(default_factory=list)
+    genomic_hit_count: int = 0
+    query_count: int = 0
+    enrichment_summary: str = ""
+
+
 class AgentQuery(BaseModel):
     """Input to the Imaging Intelligence Agent."""
     question: str
@@ -582,4 +597,5 @@ class AgentResponse(BaseModel):
     workflow_results: List[WorkflowResult] = Field(default_factory=list)
     nim_services_used: List[str] = Field(default_factory=list)
     knowledge_used: List[str] = Field(default_factory=list)
+    cross_modal: Optional[CrossModalResult] = None
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())

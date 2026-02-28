@@ -264,13 +264,14 @@ class TestInvokeWorkflow:
     """Tests for invoke_workflow()."""
 
     def test_invokes_known_workflow(self, agent):
-        result = agent.invoke_workflow("ct_head_hemorrhage", "/tmp/test.nii.gz")
+        result, cross_modal = agent.invoke_workflow("ct_head_hemorrhage", "/tmp/test.nii.gz")
         assert result is not None
         assert result.workflow_name == "ct_head_hemorrhage"
 
     def test_returns_none_for_unknown_workflow(self, agent):
-        result = agent.invoke_workflow("nonexistent_workflow")
+        result, cross_modal = agent.invoke_workflow("nonexistent_workflow")
         assert result is None
+        assert cross_modal is None
 
     def test_workflow_receives_input_path(self, agent, mock_workflow_registry):
         agent.invoke_workflow("ct_head_hemorrhage", "/data/ct_head.nii.gz")

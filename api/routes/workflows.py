@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from src.cross_modal import CrossModalTrigger
 from src.workflows import WORKFLOW_REGISTRY
 
 # =====================================================================
@@ -47,6 +48,15 @@ class FindingDetail(BaseModel):
     extra: Dict[str, Any] = {}
 
 
+class CrossModalResponse(BaseModel):
+    """Cross-modal genomics enrichment attached to a workflow result."""
+    trigger_reason: str = ""
+    genomic_context: List[str] = []
+    genomic_hit_count: int = 0
+    query_count: int = 0
+    enrichment_summary: str = ""
+
+
 class WorkflowRunResponse(BaseModel):
     """Result from executing an imaging workflow."""
     workflow_name: str
@@ -58,6 +68,7 @@ class WorkflowRunResponse(BaseModel):
     inference_time_ms: float
     nim_services_used: List[str]
     is_mock: bool
+    cross_modal: Optional[CrossModalResponse] = None
 
 
 class WorkflowRunRequest(BaseModel):
@@ -123,6 +134,11 @@ async def run_workflow(name: str, request: WorkflowRunRequest):
     Mock mode returns clinically realistic synthetic results
     suitable for demonstrations and testing.
 
+    When cross-modal integration is enabled and the workflow result
+    meets a severity threshold (e.g., Lung-RADS 4A+), the response
+    includes genomic context retrieved from the genomic_evidence
+    collection.
+
     Available workflows:
       - ct_head_hemorrhage: Emergency intracranial hemorrhage triage
       - ct_chest_lung_nodule: Lung cancer screening nodule analysis
@@ -165,6 +181,24 @@ async def run_workflow(name: str, request: WorkflowRunRequest):
             extra=extra,
         ))
 
+    # Evaluate cross-modal trigger
+    cross_modal_response = None
+    cross_modal_trigger = _get_cross_modal_trigger()
+    if cross_modal_trigger:
+        cm_result = cross_modal_trigger.evaluate(result)
+        if cm_result:
+            cross_modal_response = CrossModalResponse(
+                trigger_reason=cm_result.trigger_reason,
+                genomic_context=cm_result.genomic_context,
+                genomic_hit_count=cm_result.genomic_hit_count,
+                query_count=cm_result.query_count,
+                enrichment_summary=cm_result.enrichment_summary,
+            )
+            logger.info(
+                f"Cross-modal enrichment for {name}: "
+                f"{cm_result.genomic_hit_count} genomic hits"
+            )
+
     return WorkflowRunResponse(
         workflow_name=result.workflow_name,
         status=result.status.value,
@@ -175,7 +209,21 @@ async def run_workflow(name: str, request: WorkflowRunRequest):
         inference_time_ms=result.inference_time_ms,
         nim_services_used=result.nim_services_used,
         is_mock=result.is_mock,
+        cross_modal=cross_modal_response,
     )
+
+
+def _get_cross_modal_trigger() -> Optional[CrossModalTrigger]:
+    """Retrieve the CrossModalTrigger from application state, if available.
+
+    Returns None if the trigger has not been initialized (e.g., during
+    unit tests or when cross-modal is disabled).
+    """
+    try:
+        from api.main import _state
+        return _state.get("cross_modal_trigger")
+    except Exception:
+        return None
 
 
 @router.get("/workflow/{name}/info", response_model=WorkflowInfo)

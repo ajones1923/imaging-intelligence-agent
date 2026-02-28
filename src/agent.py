@@ -8,7 +8,8 @@ from typing import Dict, List, Optional
 
 from loguru import logger
 
-from src.models import AgentQuery, AgentResponse, WorkflowResult
+from src.cross_modal import CrossModalTrigger
+from src.models import AgentQuery, AgentResponse, CrossModalResult, WorkflowResult
 from src.rag_engine import ImagingRAGEngine
 
 
@@ -50,10 +51,17 @@ class ImagingIntelligenceAgent:
         "vilam3": ["interpret", "describe", "report", "what does this show", "vlm"],
     }
 
-    def __init__(self, rag_engine: ImagingRAGEngine, workflow_registry=None, nim_manager=None):
+    def __init__(
+        self,
+        rag_engine: ImagingRAGEngine,
+        workflow_registry=None,
+        nim_manager=None,
+        cross_modal_trigger: Optional[CrossModalTrigger] = None,
+    ):
         self.rag = rag_engine
         self.workflows = workflow_registry or {}
         self.nim_manager = nim_manager
+        self.cross_modal_trigger = cross_modal_trigger
 
     def search_plan(self, question: str) -> SearchPlan:
         """Analyze question to create a search plan."""
@@ -91,11 +99,19 @@ class ImagingIntelligenceAgent:
             return "partial"
         return "insufficient"
 
-    def invoke_workflow(self, workflow_name: str, input_path: str = "") -> Optional[WorkflowResult]:
-        """Run a reference imaging workflow."""
+    def invoke_workflow(
+        self, workflow_name: str, input_path: str = ""
+    ) -> tuple[Optional[WorkflowResult], Optional[CrossModalResult]]:
+        """Run a reference imaging workflow and evaluate cross-modal triggers.
+
+        Returns:
+            Tuple of (WorkflowResult, CrossModalResult).  The cross-modal
+            result is None when the trigger is disabled or the workflow
+            result does not meet any severity threshold.
+        """
         if workflow_name not in self.workflows:
             logger.warning(f"Unknown workflow: {workflow_name}")
-            return None
+            return None, None
         workflow_cls = self.workflows[workflow_name]
         workflow = workflow_cls(mock_mode=True, nim_clients={})
         if self.nim_manager:
@@ -103,7 +119,20 @@ class ImagingIntelligenceAgent:
                 "vista3d": self.nim_manager.vista3d,
                 "vilam3": self.nim_manager.vilam3,
             }
-        return workflow.run(input_path)
+        result = workflow.run(input_path)
+
+        # Evaluate cross-modal trigger
+        cross_modal_result = None
+        if result and self.cross_modal_trigger:
+            cross_modal_result = self.cross_modal_trigger.evaluate(result)
+            if cross_modal_result:
+                logger.info(
+                    f"Cross-modal enrichment attached: "
+                    f"{cross_modal_result.genomic_hit_count} genomic hits "
+                    f"({cross_modal_result.trigger_reason})"
+                )
+
+        return result, cross_modal_result
 
     def run(self, query: AgentQuery) -> AgentResponse:
         """Full agent pipeline: plan -> search -> NIM -> evaluate -> synthesize."""
@@ -124,6 +153,7 @@ class ImagingIntelligenceAgent:
         # NIM invocation (if requested and available)
         workflow_results = []
         nim_services_used = []
+        cross_modal_result = None
 
         if query.include_nim and plan.recommended_nims and self.nim_manager:
             for nim_name in plan.recommended_nims:
@@ -133,6 +163,14 @@ class ImagingIntelligenceAgent:
                         nim_services_used.append(nim_name)
                 except Exception as e:
                     logger.warning(f"NIM {nim_name} invocation skipped: {e}")
+
+        # Evaluate cross-modal triggers on any workflow results
+        if workflow_results and self.cross_modal_trigger:
+            for wr in workflow_results:
+                cm = self.cross_modal_trigger.evaluate(wr)
+                if cm is not None:
+                    cross_modal_result = cm
+                    break  # Use the first trigger match
 
         # Generate answer
         answer = self.rag.query(query.question)
@@ -144,6 +182,7 @@ class ImagingIntelligenceAgent:
             workflow_results=workflow_results,
             nim_services_used=nim_services_used,
             knowledge_used=[k for k in ["pathology", "modality", "anatomy"] if evidence.knowledge_context],
+            cross_modal=cross_modal_result,
         )
 
     def generate_report(self, response: AgentResponse) -> str:
@@ -187,6 +226,27 @@ class ImagingIntelligenceAgent:
                 if wr.measurements:
                     for k, v in wr.measurements.items():
                         lines.append(f"- {k}: {v}")
+
+        if response.cross_modal:
+            cm = response.cross_modal
+            lines.extend([
+                f"",
+                f"## Cross-Modal Genomics Enrichment",
+                f"",
+                f"**Trigger:** {cm.trigger_reason}",
+                f"**Genomic hits:** {cm.genomic_hit_count}",
+                f"**Queries executed:** {cm.query_count}",
+                f"",
+                cm.enrichment_summary,
+            ])
+            if cm.genomic_context:
+                lines.extend([
+                    f"",
+                    f"### Genomic Evidence",
+                    f"",
+                ])
+                for ctx in cm.genomic_context[:10]:  # Limit to top 10
+                    lines.append(f"- {ctx}")
 
         lines.extend([
             f"",
