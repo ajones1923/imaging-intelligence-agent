@@ -146,6 +146,8 @@ Two automated ingest pipelines maintain currency:
 
 Both pipelines support scheduled execution via APScheduler (default weekly, configurable).
 
+The current deployment contains 2,678 PubMed research papers, 12 clinical trials from ClinicalTrials.gov, and 124 curated seed records across findings, protocols, devices, anatomy, benchmarks, guidelines, report templates, and datasets. The shared genomic_evidence collection contributes an additional 3,561,170 vectors from the Stage 2 RAG pipeline, bringing the total to 3,563,984 vectors.
+
 ### 4.3 Domain Knowledge Graph
 
 A structured knowledge graph provides RAG augmentation beyond vector retrieval:
@@ -233,6 +235,8 @@ All inference happens on-device. No patient data, imaging studies, or clinical q
 | MRI Brain MS Lesion Tracking | < 5 minutes | Live inference |
 | Any workflow (mock mode) | < 100 ms | Mock |
 
+**Validation.** The system includes 539 unit tests covering all models, knowledge graphs, query expansion, RAG engine, NIM clients, workflows, and exports. End-to-end validation confirms 9 out of 9 checks passing across Milvus collections, RAG queries, NIM services, API health, workflow registry, cross-modal triggers, FHIR export, export pipeline, and full pipeline execution.
+
 ### 7.3 NIM Startup Times
 
 | NIM Service | Model Load Time |
@@ -246,25 +250,31 @@ All inference happens on-device. No patient data, imaging studies, or clinical q
 
 ## 8. Future Directions
 
-### 8.1 Phase 2 Roadmap
+### 8.1 Recently Implemented
 
-**DICOM server integration.** Orthanc DICOM server for STOW-RS/WADO-RS, enabling direct integration with PACS and modality worklists. Event-driven webhook triggers on study completion to initiate automatic workflow execution.
+**FHIR R4 interoperability.** The export module generates FHIR R4 DiagnosticReport Bundles containing Patient, ImagingStudy, Observation, and DiagnosticReport resources. Findings are coded with SNOMED CT (10+ imaging finding codes), categories use LOINC (LP29684-5 Radiology), and modalities use standard DICOM codes. Bundles can be submitted directly to FHIR-compliant EHR systems.
 
-**Cross-modal pipeline triggers.** Lung-RADS 4B+ findings automatically trigger the Parabricks genomics pipeline for tumor profiling. Quantitative imaging endpoints (RECIST measurements, tumor volume changes) feed into the drug discovery pipeline for treatment-response tracking.
+**Cross-modal genomics integration.** High-risk imaging findings automatically trigger genomic variant queries. Lung-RADS 4A+ lung nodules query EGFR, ALK, ROS1, and KRAS variant evidence from the 3.5 million genomic evidence vectors. CXR urgent findings (consolidation) trigger infection-related genomic queries. This cross-modal enrichment enables precision medicine workflows bridging radiology and genomics.
 
-**FHIR R4 output.** DiagnosticReport and Observation resources for EHR integration, enabling automated result reporting and clinical decision support alerts.
+**Orthanc DICOM integration.** An Orthanc DICOM server receives studies via standard C-STORE protocol. A webhook-based event pipeline auto-routes incoming studies to the appropriate clinical workflow based on modality and body region. Event history provides audit trails for all processed studies.
+
+**NVIDIA FLARE federated learning.** Three federated learning job configurations enable privacy-preserving model training across institutions: CXR classification (DenseNet-121, 18-class), CT organ segmentation (SegResNet, 14-class), and lung nodule detection (RetinaNet). The framework includes multi-site Docker deployment, mTLS security, and homomorphic encryption for secure aggregation.
+
+**NVIDIA Cloud NIM inference.** When local NIM containers are unavailable, the agent seamlessly falls back to NVIDIA Cloud NIM endpoints (integrate.api.nvidia.com) for LLM (Meta Llama-3.1-8B-Instruct) and VLM (Meta Llama-3.2-11B-Vision-Instruct) inference.
+
+### 8.2 Remaining Phase 2 Roadmap
 
 **DICOM SR output.** Structured reports via highdicom TID 1500 measurement reports, stored directly in the DICOM archive alongside source images.
 
 **LangGraph multi-step agent.** An advanced reasoning agent that chains triage, longitudinal analysis, population comparison, and report generation in a multi-step workflow with human-in-the-loop checkpoints.
 
-### 8.2 Research Directions
-
-**Federated learning.** Privacy-preserving model training across multiple institutions using the DGX Spark as a local training node, enabling model improvement without centralizing patient data.
-
 **Population analytics.** Cohort-level imaging trends, disease prevalence monitoring, and outcomes tracking across institutional imaging archives.
 
 **Multimodal integration.** Combining imaging findings with genomic variants, pathology results, and clinical notes for comprehensive patient assessment.
+
+### 8.3 Research Directions
+
+**Federated learning.** Three NVIDIA FLARE job configurations are now in place (CXR classification, CT segmentation, lung nodule detection). Next steps include multi-institution pilot deployment, federated model evaluation across heterogeneous data distributions, and integration of differential privacy mechanisms beyond the current homomorphic encryption support.
 
 ---
 

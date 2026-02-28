@@ -4,7 +4,7 @@ Medical imaging AI agent with RAG knowledge system, NVIDIA NIM integration, and 
 
 ## Overview
 
-The Imaging Intelligence Agent provides clinical decision support for radiology through a multi-collection RAG engine backed by 10 Milvus vector collections, 4 NVIDIA NIM microservices, and 4 reference clinical workflows. It searches across medical imaging literature, clinical trials, FDA-cleared devices, acquisition protocols, anatomical references, benchmarks, clinical guidelines, report templates, and public datasets -- synthesizing cross-domain answers grounded in evidence.
+The Imaging Intelligence Agent provides clinical decision support for radiology through a multi-collection RAG engine backed by 10 Milvus vector collections, 4 NVIDIA NIM microservices, and 4 reference clinical workflows. It searches across medical imaging literature, clinical trials, FDA-cleared devices, acquisition protocols, anatomical references, benchmarks, clinical guidelines, report templates, and public datasets -- synthesizing cross-domain answers grounded in evidence. The agent supports FHIR R4 interoperability for standards-based clinical report exchange, Orthanc DICOM auto-ingestion for automated study processing, cross-modal genomics enrichment linking imaging findings to relevant genetic variants, and NVIDIA FLARE federated learning for privacy-preserving multi-site model training.
 
 ### Architecture
 
@@ -87,6 +87,7 @@ docker compose logs -f imaging-setup
 | NIM MAISI | 8531 | Synthetic CT volume generation |
 | NIM VILA-M3 | 8532 | Vision-language model for radiology |
 | Milvus | 19530 | Vector database (gRPC) |
+| Orthanc DICOM Server | 8042 / 4242 | DICOM HTTP API (8042) and DICOM C-STORE receiver (4242) |
 | Milvus Metrics | 9091 | Health and metrics endpoint |
 
 ## Local Development
@@ -150,11 +151,21 @@ streamlit run app/imaging_ui.py --server.port 8525
 | GET | `/workflow/{name}/info` | Get metadata for a specific workflow |
 | POST | `/workflow/{name}/run` | Execute a workflow (mock or live) |
 
+### DICOM Events
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/events/dicom-webhook` | Process DICOM study events (auto-triggers workflow) |
+| GET | `/events/history` | Paginated DICOM event history |
+| GET | `/events/status` | Event bus configuration and routing table |
+
 ### Reports
 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/reports/generate` | Generate clinical report (markdown, JSON, or PDF) |
+
+Export supports Markdown, JSON, PDF, and FHIR R4 DiagnosticReport Bundle.
 
 ### Infrastructure
 
@@ -180,10 +191,10 @@ All NIM clients inherit from `BaseNIMClient` which provides cached health checks
 
 | Workflow | Modality | Body Region | Target Latency | Model |
 |---|---|---|---|---|
-| CT Head Hemorrhage Triage | CT | Head | < 90 sec | 3D U-Net (MONAI) |
-| CT Chest Lung Nodule Tracking | CT | Chest | < 5 min | RetinaNet + SegResNet |
-| CXR Rapid Findings | X-ray | Chest | < 30 sec | DenseNet-121 |
-| MRI Brain MS Lesion Tracking | MRI | Brain | < 5 min | 3D U-Net + SyN registration |
+| CT Head Hemorrhage Triage | CT | Head | < 90 sec | SegResNet (MONAI wholeBody_ct_segmentation) |
+| CT Chest Lung Nodule Tracking | CT | Chest | < 5 min | RetinaNet + SegResNet (MONAI lung_nodule_ct_detection) |
+| CXR Rapid Findings | X-ray | Chest | < 30 sec | DenseNet-121 (torchxrayvision CheXpert) |
+| MRI Brain MS Lesion Tracking | MRI | Brain | < 5 min | UNEST (MONAI wholeBrainSeg_Large_UNEST_segmentation) |
 
 Each workflow follows a `preprocess -> infer -> postprocess` pipeline with full mock mode support for demonstration and testing.
 
@@ -205,10 +216,26 @@ Each workflow follows a `preprocess -> infer -> postprocess` pipeline with full 
 | `imaging_datasets` | Public imaging datasets (TCIA, PhysioNet) |
 | `genomic_evidence` | *(read-only)* Shared from Stage 2 RAG pipeline |
 
+**Current data:** 2,678 PubMed papers, 12 clinical trials, 124 seed reference records, 3,561,170 genomic evidence vectors (3.56M total vectors across 11 collections).
+
+## Cross-Modal Genomics Integration
+
+When clinical workflows detect high-risk findings (Lung-RADS 4A+ lung nodules, urgent CXR findings), the agent automatically queries the genomic_evidence collection (3.5M vectors from Stage 2 RAG pipeline) for relevant genetic variants (EGFR, ALK, ROS1, KRAS). Results are included in the response as cross-modal enrichment.
+
+## Export Formats
+
+| Format | Function | Output |
+|---|---|---|
+| Markdown | `export_markdown()` | Structured clinical report |
+| JSON | `export_json()` | Full Pydantic model serialization |
+| PDF | `export_pdf()` | Professional formatted report (ReportLab) |
+| FHIR R4 | `export_fhir()` | DiagnosticReport Bundle with SNOMED CT, LOINC, DICOM coding |
+
 ## Testing
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -v  # 539 tests
+python scripts/validate_e2e.py --quick  # 9/9 E2E checks
 ```
 
 ## Project Structure
@@ -222,6 +249,7 @@ agent/
 |       +-- nim.py                      # /nim/* NIM proxy endpoints
 |       +-- workflows.py               # /workflow/* endpoints
 |       +-- reports.py                  # /reports/generate endpoint
+|       +-- events.py                  # DICOM event webhook and history
 +-- app/
 |   +-- imaging_ui.py                   # Streamlit chat UI (port 8525)
 +-- config/
@@ -229,6 +257,7 @@ agent/
 +-- src/
 |   +-- agent.py                        # Imaging Intelligence Agent orchestrator
 |   +-- collections.py                  # 10 Milvus collection schemas + manager
+|   +-- cross_modal.py                  # Cross-modal genomics trigger
 |   +-- export.py                       # Report export (PDF, markdown)
 |   +-- knowledge.py                    # Domain knowledge graph
 |   +-- metrics.py                      # Prometheus metrics
@@ -260,9 +289,12 @@ agent/
 |       +-- benchmark_parser.py        # Benchmark parser
 |       +-- guideline_parser.py        # Guideline parser
 |       +-- report_template_parser.py  # Report template parser
+|       +-- dicom_watcher.py          # Orthanc DICOM polling service
 +-- tests/
 +-- docs/
 +-- data/
+|   +-- sample_images/fullres/         # Full-resolution synthetic CXR images
++-- flare/                              # NVIDIA FLARE federated learning configs
 +-- docker-compose.yml                  # Full stack (with NIMs)
 +-- docker-compose.lite.yml             # Lite stack (RAG-only, no GPU)
 +-- requirements.txt

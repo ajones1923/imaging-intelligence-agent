@@ -2,7 +2,7 @@
 
 **Author:** Adam Jones
 **Date:** February 2026
-**Version:** 1.0.0
+**Version:** 1.1.0
 **License:** Apache 2.0
 
 ---
@@ -67,9 +67,34 @@ Domain knowledge providing structured context for RAG augmentation:
 | Modalities | ~8 | Physics, protocols, typical indications |
 | Anatomy | ~15 | VISTA-3D labels, SNOMED codes, FMA IDs, imaging characteristics |
 
-### 2.6 API Layer (`api/`)
+### 2.6 Cross-Modal Genomics Integration (`src/cross_modal.py`)
 
-FastAPI server on port 8524 with four route modules:
+CrossModalTrigger enriches clinical findings with genomic context:
+- Lung-RADS 4A+ findings trigger EGFR, ALK, ROS1, KRAS variant queries
+- CXR urgent findings (consolidation) trigger infection genomics queries
+- Queries the shared `genomic_evidence` collection (3.5M vectors)
+- Returns genomic hits with variant details, clinical significance, AlphaMissense scores
+
+### 2.7 FHIR R4 Export (`src/export.py`)
+
+Four export formats: Markdown, JSON, PDF, FHIR R4 DiagnosticReport Bundle:
+- FHIR Bundle contains Patient, ImagingStudy, Observation, and DiagnosticReport resources
+- SNOMED CT coding for findings (hemorrhage=50960005, nodule=416940007, etc.)
+- LOINC coding for category (LP29684-5 Radiology) and code (18748-4 Diagnostic imaging study)
+- DICOM modality codes (CT, MR, DX, CR, US, PT, MG, RF)
+- Observation Interpretation codes mapped from FindingSeverity
+
+### 2.8 DICOM Ingestion (`src/ingest/dicom_watcher.py`, `api/routes/events.py`)
+
+Orthanc-integrated DICOM auto-ingestion pipeline:
+- DicomWatcher polls Orthanc /changes API for StableStudy events
+- Webhook endpoint receives study.complete events
+- Workflow routing: CT+head→ct_head_hemorrhage, CT+chest→ct_chest_lung_nodule, CR+chest→cxr_rapid_findings, MR+brain→mri_brain_ms_lesion
+- Event history with pagination (max 200)
+
+### 2.9 API Layer (`api/`)
+
+FastAPI server on port 8524 with five route modules:
 
 | Module | Prefix | Endpoints |
 |---|---|---|
@@ -77,10 +102,11 @@ FastAPI server on port 8524 with four route modules:
 | `nim.py` | `/nim` | `/nim/status`, `/nim/vista3d/segment`, `/nim/maisi/generate`, `/nim/vilam3/analyze` |
 | `workflows.py` | (root) | `/workflows`, `/workflow/{name}/info`, `/workflow/{name}/run` |
 | `reports.py` | (root) | `/reports/generate` (markdown, JSON, PDF) |
+| `events.py` | `/events` | `/events/dicom-webhook`, `/events/history`, `/events/status` |
 
 Core endpoints on root: `/health`, `/collections`, `/query`, `/search`, `/find-related`, `/knowledge/stats`, `/metrics`
 
-### 2.7 UI Layer (`app/imaging_ui.py`)
+### 2.10 UI Layer (`app/imaging_ui.py`)
 
 Streamlit chat interface on port 8525:
 - NVIDIA-themed styling
@@ -254,6 +280,14 @@ Configurable in `config/settings.py` (must sum to ~1.0):
 |---|---|---|---|
 | POST | `/reports/generate` | `ReportRequest` (question, format: markdown/json/pdf) | `ReportResponse` or PDF binary |
 
+### DICOM Event Endpoints
+
+| Method | Path | Request Body | Response |
+|---|---|---|---|
+| POST | `/events/dicom-webhook` | `DicomStudyEvent` (event_type, study_uid, patient_id, modality, body_region) | `DicomIngestionResult` (workflow_triggered, workflow_result) |
+| GET | `/events/history` | Query: limit, offset | Paginated event list |
+| GET | `/events/status` | -- | Routing table, history count, Orthanc URL |
+
 ### Infrastructure Endpoints
 
 | Method | Path | Response |
@@ -283,13 +317,14 @@ Configurable in `config/settings.py` (must sum to ~1.0):
 
 ### Full Stack (`docker-compose.yml`)
 
-12 services total:
+13 services total:
 - `milvus-etcd` -- etcd key-value store for Milvus metadata
 - `milvus-minio` -- MinIO object storage for Milvus data
 - `milvus-standalone` -- Milvus 2.4 vector database
 - `imaging-streamlit` -- Streamlit chat UI
 - `imaging-api` -- FastAPI REST server
 - `imaging-setup` -- One-shot collection creation and data seeding
+- `orthanc` -- Orthanc DICOM server (PACS, port 8042 HTTP / 4242 DICOM)
 - `nim-llm` -- Meta Llama-3 8B Instruct
 - `nim-vista3d` -- NVIDIA VISTA-3D segmentation
 - `nim-maisi` -- NVIDIA MAISI synthetic imaging
@@ -311,6 +346,7 @@ Configurable in `config/settings.py` (must sum to ~1.0):
 | `minio_data` | Milvus object storage persistence |
 | `milvus_data` | Milvus vector data persistence |
 | `nim_models` | Cached NIM model weights (full stack only) |
+| `orthanc_data` | Orthanc DICOM storage persistence |
 
 ---
 
@@ -334,18 +370,43 @@ All configuration via Pydantic `BaseSettings` in `config/settings.py`. Environme
 
 ---
 
-## 10. Phase 2 Roadmap
+## 10. Data Statistics
+
+| Metric | Count |
+|---|---|
+| Total vectors | 3,563,984 |
+| PubMed papers | 2,678 |
+| Clinical trials | 12 |
+| Seed reference records | 124 |
+| Genomic evidence vectors | 3,561,170 |
+| Unit tests | 539 |
+| E2E validation checks | 9/9 |
+| Docker services (full) | 13 |
+| Docker services (lite) | 6 |
+
+---
+
+## 11. Phase 2 Roadmap
+
+### Implemented (Phase 1.1)
 
 | Feature | Description | Status |
 |---|---|---|
-| DICOM Server Integration | Orthanc DICOM server for STOW-RS/WADO-RS | Hooks in settings (disabled) |
-| Cross-Modal Triggers | Lung-RADS 4B+ triggers Parabricks genomics pipeline | Architecture defined |
-| Federated Learning | Privacy-preserving model training across institutions | Planned |
-| FHIR R4 Output | DiagnosticReport and Observation resources | Planned |
+| FHIR R4 Output | DiagnosticReport Bundle with SNOMED CT, LOINC, DICOM coding | Implemented |
+| DICOM Server Integration | Orthanc DICOM server with webhook auto-routing | Implemented |
+| Cross-Modal Triggers | Lung-RADS 4A+ triggers genomic queries (EGFR/ALK/ROS1/KRAS) | Implemented |
+| Federated Learning | NVIDIA FLARE configs: 3 jobs, multi-site, mTLS, HE (see `flare/`) | Implemented |
+| Cloud NIM Inference | NVIDIA Cloud NIMs via integrate.api.nvidia.com (Llama-3.1-8B + Llama-3.2-11B-Vision) | Implemented |
+| Real Pretrained Weights | CheXpert DenseNet-121, MONAI RetinaNet, SegResNet, UNEST | Implemented |
+
+### Planned (Phase 2)
+
+| Feature | Description | Status |
+|---|---|---|
 | DICOM SR Output | Structured reports via highdicom TID 1500 | Planned |
 | Population Analytics | Cohort-level imaging trends and outcomes | Planned |
-| LangGraph Agent | Multi-step reasoning: triage, longitudinal, population, report | Planned |
-| Live NIM Inference | Replace mock with real VISTA-3D, MAISI, VILA-M3 inference | NIM clients ready |
+| LangGraph Agent | Multi-step reasoning with human-in-the-loop | Planned |
+| Live Local NIM Inference | Local GPU deployment of VISTA-3D, MAISI, VILA-M3 | NIM clients ready |
 
 ---
 

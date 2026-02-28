@@ -152,7 +152,54 @@ IMAGING_NIM_ALLOW_MOCK_FALLBACK=true
 |---|---|---|
 | `local` | `true` | Try real NIM, fall back to mock on failure |
 | `local` | `false` | Try real NIM, raise error on failure |
+| `cloud` | `true` | Uses NVIDIA Cloud NIM endpoints (integrate.api.nvidia.com). Requires NVIDIA_API_KEY. LLM uses meta/llama-3.1-8b-instruct, VLM uses meta/llama-3.2-11b-vision-instruct. VISTA-3D and MAISI fall back to mock. |
+| `cloud` | `false` | Same as above, but raises error if cloud endpoint is unreachable |
 | `mock` | (ignored) | Always use mock responses |
+
+### Feature Comparison by Mode
+
+| Feature | local | cloud | mock |
+|---|---|---|---|
+| LLM inference | Local Llama-3 NIM (port 8520) | NVIDIA Cloud (llama-3.1-8b) | Template responses |
+| VLM inference | Local VILA-M3 NIM (port 8532) | NVIDIA Cloud (llama-3.2-11b-vision) | Template responses |
+| VISTA-3D segmentation | Local NIM (port 8530) | Mock fallback | Synthetic masks |
+| MAISI generation | Local NIM (port 8531) | Mock fallback | Metadata only |
+| GPU required | Yes (all 4 NIMs) | No (API only) | No |
+| API key required | NGC_API_KEY | NVIDIA_API_KEY | None |
+
+---
+
+## NVIDIA Cloud NIM Endpoints
+
+### Cloud NIM Configuration
+
+When local NIM containers are unavailable or for development without GPU, the agent can use NVIDIA Cloud NIM endpoints. This requires an NVIDIA API key.
+
+**Environment variables:**
+```bash
+IMAGING_NIM_MODE=cloud
+IMAGING_NVIDIA_API_KEY=nvapi-xxxxx  # or NVIDIA_API_KEY
+```
+
+**Settings in `config/settings.py`:**
+```python
+NIM_CLOUD_URL: str = "https://integrate.api.nvidia.com/v1"
+NIM_CLOUD_LLM_MODEL: str = "meta/llama-3.1-8b-instruct"
+NIM_CLOUD_VLM_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+```
+
+**Behavior:**
+- LLM requests route to `meta/llama-3.1-8b-instruct` via NVIDIA Cloud
+- VLM requests route to `meta/llama-3.2-11b-vision-instruct` via NVIDIA Cloud
+- VISTA-3D and MAISI remain in mock mode (no cloud equivalent -- these require local GPU)
+- Cloud mode provides real LLM/VLM inference without local GPU
+
+**Health check with cloud NIMs:**
+```bash
+curl -s http://localhost:8524/nim/status | python3 -m json.tool
+# Expected:
+# vista3d: mock, maisi: mock, vila_m3: cloud, llm: cloud
+```
 
 ---
 

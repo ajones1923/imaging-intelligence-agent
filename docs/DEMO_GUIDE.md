@@ -8,14 +8,18 @@
 
 ## 1. Demo Overview
 
-This guide walks through five demonstration scenarios that showcase the Imaging Intelligence Agent's capabilities. All scenarios work in both Lite Mode (mock NIMs, no GPU) and Full Mode (live NIMs on DGX Spark).
+This guide walks through eight demonstration scenarios that showcase the Imaging Intelligence Agent's capabilities. All scenarios work in both Lite Mode (mock NIMs, no GPU) and Full Mode (live NIMs on DGX Spark).
 
-**Demo duration:** 15-20 minutes for all five scenarios.
+**Demo duration:** 25-30 minutes for all eight scenarios.
 
 **Key talking points:**
 - Multi-collection RAG across 10 imaging-specific knowledge domains
 - On-device NVIDIA NIM inference for medical imaging (VISTA-3D, MAISI, VILA-M3)
 - Clinical workflow automation with severity classification
+- FHIR R4 DiagnosticReport export with SNOMED CT and LOINC coding
+- Orthanc DICOM auto-ingestion with intelligent workflow routing
+- Cross-modal genomics integration (imaging → genomic variant correlation)
+- NVIDIA FLARE federated learning configuration
 - Runs entirely on a single NVIDIA DGX Spark ($3,999)
 - Open source, Apache 2.0 licensed
 
@@ -57,6 +61,33 @@ curl http://localhost:8524/health | python -m json.tool
 
 # Verify collection data
 curl http://localhost:8524/collections | python -m json.tool
+```
+
+**Expected health output:**
+```json
+{
+  "status": "healthy",
+  "collections": {
+    "imaging_literature": 2678,
+    "imaging_trials": 12,
+    "imaging_findings": 25,
+    "imaging_protocols": 15,
+    "imaging_devices": 15,
+    "imaging_anatomy": 20,
+    "imaging_benchmarks": 15,
+    "imaging_guidelines": 12,
+    "imaging_report_templates": 10,
+    "imaging_datasets": 12,
+    "genomic_evidence": 3561170
+  },
+  "total_vectors": 3563984,
+  "nim_services": {
+    "vista3d": "mock",
+    "maisi": "mock",
+    "vila_m3": "cloud",
+    "llm": "cloud"
+  }
+}
 ```
 
 ### 2.3 Open the UI
@@ -139,19 +170,21 @@ curl -X POST http://localhost:8524/workflow/ct_head_hemorrhage/run \
   "findings": [
     {
       "category": "hemorrhage",
-      "description": "Acute intraparenchymal hemorrhage...",
-      "severity": "critical",
-      "recommendation": "Emergent neurosurgery consultation"
+      "description": "Intraparenchymal hemorrhage in right basal ganglia, volume 12.5 mL, midline shift 3.2 mm, max thickness 8.1 mm",
+      "severity": "urgent"
     }
   ],
   "measurements": {
-    "volume_ml": 35.2,
-    "midline_shift_mm": 6.8,
-    "max_thickness_mm": 12.4
+    "volume_ml": 12.5,
+    "midline_shift_mm": 3.2,
+    "max_thickness_mm": 8.1,
+    "hounsfield_mean": 62.0,
+    "hounsfield_max": 78.0,
+    "surrounding_edema_ml": 4.3
   },
-  "classification": "P1",
-  "severity": "critical",
-  "inference_time_ms": 45.0,
+  "classification": "urgent_hemorrhage",
+  "severity": "urgent",
+  "inference_time_ms": 0.1,
   "is_mock": true
 }
 ```
@@ -222,7 +255,7 @@ curl -X POST http://localhost:8524/nim/vilam3/analyze \
 
 ### Scenario 5: Report Generation
 
-**Goal:** Show clinical report export as PDF.
+**Goal:** Show clinical report export as PDF and FHIR R4.
 
 **Using the API:**
 ```bash
@@ -245,6 +278,14 @@ curl -X POST http://localhost:8524/reports/generate \
     "top_k": 5,
     "report_title": "MS Imaging Features Report"
   }' --output ms_report.pdf
+
+# Generate FHIR R4 DiagnosticReport (via Python)
+python3 -c "
+from src.export import export_fhir
+# ... (after running a query/workflow)
+fhir_json = export_fhir(response, patient_id='DEMO-001')
+print(fhir_json[:500])
+"
 ```
 
 **Using the UI:**
@@ -260,11 +301,130 @@ curl -X POST http://localhost:8524/reports/generate \
 - Disclaimer noting research use only
 
 **Talking points:**
-- Three output formats: markdown, JSON, PDF
+- Four output formats: markdown, JSON, PDF, FHIR R4 DiagnosticReport
 - PDF generated via ReportLab with professional formatting
 - Evidence citations include collection source and relevance scores
 - Reports include a research-use-only disclaimer
 - Suitable for clinical decision support documentation
+
+---
+
+### Scenario 6: FHIR R4 DiagnosticReport Export
+
+**Goal:** Show FHIR R4 interoperability with standardized clinical coding.
+
+**Using the API:**
+```bash
+# Run a workflow to get clinical findings
+curl -s -X POST http://localhost:8524/workflow/ct_head_hemorrhage/run \
+  -H "Content-Type: application/json" \
+  -d '{"input_path": ""}' | python3 -m json.tool
+```
+
+**Expected FHIR Bundle structure:**
+```
+Bundle (type: collection)
+├── Patient (id: DEMO-001)
+├── ImagingStudy (modality: CT)
+├── Observation (SNOMED: 50960005 Hemorrhage, interpretation: High)
+│   └── 6 measurement components (volume_ml, midline_shift_mm, etc.)
+└── DiagnosticReport
+    ├── LOINC Category: LP29684-5 (Radiology)
+    ├── LOINC Code: 18748-4 (Diagnostic imaging study)
+    ├── SNOMED conclusionCode: 50960005 (Hemorrhage)
+    └── Performer: AI-ImagingAgent
+```
+
+**Talking points:**
+- FHIR R4 is the global healthcare interoperability standard
+- SNOMED CT codes for 10+ imaging finding categories
+- LOINC coding for radiology category and diagnostic imaging study
+- DICOM modality codes automatically detected from query context
+- Bundle can be submitted directly to FHIR-compliant EHR systems
+- Observation resources include measurement components with UCUM units
+
+---
+
+### Scenario 7: DICOM Webhook Auto-Routing
+
+**Goal:** Show automatic clinical workflow triggering from DICOM study events.
+
+**Check routing table:**
+```bash
+curl -s http://localhost:8524/events/status | python3 -m json.tool
+```
+
+**Simulate incoming DICOM studies:**
+```bash
+# CT Head study -> auto-triggers hemorrhage workflow
+curl -s -X POST http://localhost:8524/events/dicom-webhook \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"study.complete","study_uid":"1.2.840.1001","patient_id":"P-ICH-001","modality":"CT","body_region":"head"}'
+
+# Chest X-ray -> auto-triggers CXR rapid findings
+curl -s -X POST http://localhost:8524/events/dicom-webhook \
+  -H "Content-Type: application/json" \
+  -d '{"event_type":"study.complete","study_uid":"1.2.840.1002","patient_id":"P-CXR-002","modality":"CR","body_region":"chest"}'
+
+# Check event history
+curl -s http://localhost:8524/events/history?limit=5 | python3 -m json.tool
+```
+
+**Expected routing:**
+
+| Modality + Body Region | Workflow Triggered |
+|---|---|
+| CT + head | ct_head_hemorrhage |
+| CT + chest | ct_chest_lung_nodule |
+| CR/DX + chest | cxr_rapid_findings |
+| MR + brain | mri_brain_ms_lesion |
+
+**Talking points:**
+- Orthanc DICOM server receives studies via C-STORE (port 4242)
+- Webhook fires on study.complete event
+- Intelligent routing based on modality + body region
+- Supports 8 routing rules covering all 4 workflows
+- Event history tracks all processed studies with results
+- In production, connects to hospital PACS via standard DICOM protocol
+
+---
+
+### Scenario 8: Cross-Modal Genomics Integration
+
+**Goal:** Show automatic genomic variant correlation when high-risk findings detected.
+
+**Run lung nodule workflow (triggers cross-modal):**
+```bash
+curl -s -X POST http://localhost:8524/workflow/ct_chest_lung_nodule/run \
+  -H "Content-Type: application/json" \
+  -d '{"input_path": ""}' | python3 -c "
+import json, sys
+r = json.load(sys.stdin)
+print(f'Classification: {r[\"classification\"]}')
+print(f'Severity: {r[\"severity\"]}')
+cm = r.get('cross_modal', {})
+if cm:
+    print(f'Cross-modal triggered: {cm[\"trigger_reason\"]}')
+    print(f'Genomic queries: {cm[\"query_count\"]}')
+    print(f'Genomic hits: {cm[\"genomic_hit_count\"]}')
+    for ctx in cm.get('genomic_context', [])[:3]:
+        print(f'  - {ctx[:100]}...')
+"
+```
+
+**Expected behavior:**
+1. Lung nodule workflow classifies nodules (Lung-RADS 4A)
+2. Lung-RADS 4A triggers cross-modal enrichment
+3. Agent queries genomic_evidence collection for EGFR, ALK, ROS1, KRAS variants
+4. 12 genomic hits returned, including real EGFR variant at chr7:55181370
+5. Response includes both imaging findings and genomic context
+
+**Talking points:**
+- Demonstrates the HCLS AI Factory's cross-pipeline intelligence
+- Imaging findings automatically correlate with genomic variants from Stage 2 RAG pipeline
+- 3.5 million genomic evidence vectors from real patient data (VCF → ClinVar → AlphaMissense)
+- Threshold-based triggering: only high-risk findings (Lung-RADS 4A+) activate genomic queries
+- Enables precision medicine workflow: imaging → genomics → targeted therapy
 
 ---
 

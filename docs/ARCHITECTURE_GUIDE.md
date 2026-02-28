@@ -429,6 +429,7 @@ APScheduler (`src/scheduler.py`) supports periodic re-ingestion:
 | `nim` | `/nim` | NIM Services | `/nim/status`, `/nim/vista3d/segment`, `/nim/maisi/generate`, `/nim/vilam3/analyze` |
 | `workflows` | (root) | Workflows | `/workflows`, `/workflow/{name}/info`, `/workflow/{name}/run` |
 | `reports` | (root) | Reports | `/reports/generate` |
+| `events` | `/events` | DICOM Events | `/events/dicom-webhook`, `/events/history`, `/events/status` |
 
 Core endpoints registered directly on the app: `/health`, `/collections`, `/query`, `/search`, `/find-related`, `/knowledge/stats`, `/metrics`
 
@@ -451,25 +452,79 @@ The Streamlit UI provides:
 
 ---
 
-## 10. Cross-Modal Integration Hooks (Phase 2)
+## 10. Cross-Modal Integration
 
-### 10.1 Genomic Pipeline Trigger
+### 10.1 Genomic Pipeline Trigger (Implemented)
 
+The `CrossModalTrigger` class (`src/cross_modal.py`) automatically enriches high-risk imaging findings with genomic context from the shared `genomic_evidence` collection (3.5M vectors).
+
+**Trigger conditions:**
+- Lung-RADS 4A+ findings --> queries EGFR, ALK, ROS1, KRAS variants
+- CXR urgent consolidation --> queries infection-related genomic variants
+
+**Data flow:**
 ```
-Lung-RADS 4B+ finding
+WorkflowResult (severity=urgent, classification=Lung-RADS 4A)
     |
     v
-POST /api/nextflow/trigger
-    {
-        "pipeline": "parabricks_genomics",
-        "patient_id": "...",
-        "trigger_source": "imaging_agent",
-        "finding": "lung_rads_4b",
-        "priority": "urgent"
-    }
+CrossModalTrigger.evaluate(workflow_result)
+    |
+    v
+Query genomic_evidence collection (3 queries: EGFR, ALK, KRAS)
+    |
+    v
+CrossModalResult (12 genomic hits, top score: 0.78)
+    |
+    v
+AgentResponse.cross_modal (enriched response)
 ```
 
-### 10.2 Drug Discovery Pipeline Feed
+**Configuration:**
+```python
+CROSS_MODAL_ENABLED: bool = True  # Active
+```
+
+### 10.2 FHIR R4 Export Architecture
+
+The `export_fhir()` function generates FHIR R4 DiagnosticReport Bundles:
+
+```
+FHIR Bundle (type: collection)
+├── Patient resource (stub with identifier)
+├── ImagingStudy resource (modality auto-detected from query)
+├── Observation resources (one per workflow finding)
+│   ├── SNOMED CT coding (finding category)
+│   ├── Interpretation (severity → HH/H/A/N)
+│   └── Components (measurements with UCUM units)
+└── DiagnosticReport resource
+    ├── LOINC category (LP29684-5 Radiology)
+    ├── LOINC code (18748-4 Diagnostic imaging study)
+    ├── conclusionCode (SNOMED for all findings)
+    └── extension (cross-modal enrichment summary)
+```
+
+### 10.3 DICOM Ingestion Architecture
+
+```
+Orthanc DICOM Server (port 8042 HTTP, 4242 C-STORE)
+    |
+    v
+POST /events/dicom-webhook (study.complete event)
+    |
+    v
+determine_workflow(modality, body_region) → workflow name
+    |
+    v
+WorkflowRegistry.run(workflow_name, study_data)
+    |
+    v
+DicomIngestionResult (findings, classification, severity)
+    |
+    v
+Event history (in-memory, max 200 entries)
+```
+
+### 10.4 Drug Discovery Pipeline Feed (Phase 2)
 
 ```
 Quantitative imaging endpoint
@@ -481,15 +536,6 @@ Quantitative imaging endpoint
 Drug Discovery Pipeline
     |-- Treatment-response tracking
     |-- Molecular target validation
-```
-
-### 10.3 Configuration Hooks
-
-Currently disabled in `config/settings.py`:
-
-```python
-DICOM_SERVER_URL: str = "http://localhost:8042"     # Orthanc
-CROSS_MODAL_ENABLED: bool = False                    # Feature flag
 ```
 
 ---
