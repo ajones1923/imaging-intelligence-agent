@@ -175,7 +175,11 @@ async def lifespan(app: FastAPI):
         logger.info(f"Loaded embedding model: {settings.EMBEDDING_MODEL}")
 
         # NIM service manager
-        nim_manager = NIMServiceManager(settings)
+        # NVIDIA_API_KEY can come from settings (IMAGING_NVIDIA_API_KEY env)
+        # or from the bare NVIDIA_API_KEY env var
+        import os
+        nvidia_api_key = getattr(settings, "NVIDIA_API_KEY", None) or os.environ.get("NVIDIA_API_KEY")
+        nim_manager = NIMServiceManager(settings, nvidia_api_key=nvidia_api_key)
 
         # RAG engine
         engine = ImagingRAGEngine(
@@ -373,7 +377,7 @@ async def rag_query(request: QueryRequest):
         nim_manager = _state.get("nim_manager")
         if nim_manager and request.include_nim:
             status = nim_manager.check_all_services()
-            nim_used = [name for name, s in status.items() if s in ("available", "mock")]
+            nim_used = [name for name, s in status.items() if s in ("available", "cloud", "anthropic", "mock")]
 
         return QueryResponse(
             question=request.question,

@@ -195,7 +195,7 @@ async def ask(request: AskRequest):
         if nim_manager:
             try:
                 status = nim_manager.check_all_services()
-                nim_available = [name for name, s in status.items() if s in ("available", "mock")]
+                nim_available = [name for name, s in status.items() if s in ("available", "cloud", "anthropic", "mock")]
             except Exception:
                 pass
 

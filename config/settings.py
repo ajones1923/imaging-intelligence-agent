@@ -56,9 +56,15 @@ class ImagingSettings(BaseSettings):
     NIM_VISTA3D_URL: str = "http://localhost:8530"
     NIM_MAISI_URL: str = "http://localhost:8531"
     NIM_VILAM3_URL: str = "http://localhost:8532"
-    NIM_MODE: str = "local"  # "local" or "mock"
+    NIM_MODE: str = "local"  # "local", "cloud", or "mock"
     NIM_ALLOW_MOCK_FALLBACK: bool = True
     NGC_API_KEY: Optional[str] = None
+
+    # ── NVIDIA Cloud NIM Endpoints ──
+    NVIDIA_API_KEY: Optional[str] = None
+    NIM_CLOUD_URL: str = "https://integrate.api.nvidia.com/v1"
+    NIM_CLOUD_LLM_MODEL: str = "meta/llama-3.1-8b-instruct"
+    NIM_CLOUD_VLM_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
 
     # ── RAG Search ──
     TOP_K_PER_COLLECTION: int = 5

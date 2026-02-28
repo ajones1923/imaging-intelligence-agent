@@ -23,10 +23,14 @@ env/
 .env
 !.env.example
 
-# Data
+# Data (binary images and caches are gitignored; scripts regenerate them)
 data/cache/
 data/sample_images/*.nii.gz
 data/sample_images/*.dcm
+data/sample_images/*.png
+data/sample_images/.medmnist_cache/
+data/sample_images/metadata.json
+data/sample_images/validation_results.json
 *.nii.gz
 *.dcm
 

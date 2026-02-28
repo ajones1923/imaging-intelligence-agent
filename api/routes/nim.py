@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 class NIMServiceStatus(BaseModel):
     """Status of a single NIM service."""
     name: str
-    status: str = Field(..., description="available, mock, or unavailable")
+    status: str = Field(..., description="available, cloud, anthropic, mock, or unavailable")
     url: str = ""
 
 
@@ -133,6 +133,7 @@ async def nim_status():
         logger.error(f"NIM status check failed: {e}")
         raise HTTPException(status_code=500, detail=f"NIM status check failed: {e}")
 
+    cloud_url = getattr(settings, "NIM_CLOUD_URL", "")
     nim_urls = {
         "vista3d": getattr(settings, "NIM_VISTA3D_URL", ""),
         "maisi": getattr(settings, "NIM_MAISI_URL", ""),
@@ -142,13 +143,15 @@ async def nim_status():
 
     services = []
     for name, status in status_dict.items():
+        # Show cloud URL when the service is using cloud mode
+        url = cloud_url if status == "cloud" else nim_urls.get(name, "")
         services.append(NIMServiceStatus(
             name=name,
             status=status,
-            url=nim_urls.get(name, ""),
+            url=url,
         ))
 
-    available = sum(1 for s in services if s.status == "available")
+    available = sum(1 for s in services if s.status in ("available", "cloud", "anthropic"))
     mock = sum(1 for s in services if s.status == "mock")
     unavailable = sum(1 for s in services if s.status == "unavailable")
 

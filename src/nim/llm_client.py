@@ -1,8 +1,8 @@
-"""LLM NIM client with Llama-3 NIM primary and Anthropic Claude fallback.
+"""LLM NIM client with Llama-3 NIM primary, cloud NIM, and Anthropic Claude fallback.
 
 Provides text generation for clinical reasoning, report synthesis,
-and multi-turn conversation with automatic fallback from local
-NIM Llama-3 to the Anthropic Claude API.
+and multi-turn conversation with automatic fallback chain:
+  local NIM Llama-3 -> NVIDIA cloud NIM -> Anthropic Claude -> mock
 """
 
 from typing import Any, Dict, Generator, List, Optional
@@ -13,12 +13,13 @@ from .base import BaseNIMClient
 
 
 class LlamaLLMClient(BaseNIMClient):
-    """Client for LLM inference via NIM (Llama-3) with Anthropic fallback.
+    """Client for LLM inference via NIM (Llama-3) with cloud and Anthropic fallback.
 
     Priority order:
       1. Local NIM Llama-3 endpoint (OpenAI-compatible API)
-      2. Anthropic Claude API (if anthropic_api_key provided)
-      3. Mock response (if mock_enabled)
+      2. NVIDIA Cloud NIM (Llama-3.1-8B via integrate.api.nvidia.com)
+      3. Anthropic Claude API (if anthropic_api_key provided)
+      4. Mock response (if mock_enabled)
 
     Uses the OpenAI Python client for NIM communication since NVIDIA
     NIM exposes an OpenAI-compatible /v1/chat/completions endpoint.
@@ -29,11 +30,19 @@ class LlamaLLMClient(BaseNIMClient):
         base_url: str,
         mock_enabled: bool = True,
         anthropic_api_key: Optional[str] = None,
+        nvidia_api_key: Optional[str] = None,
+        cloud_url: str = "https://integrate.api.nvidia.com/v1",
+        cloud_llm_model: str = "meta/llama-3.1-8b-instruct",
     ):
         super().__init__(base_url, service_name="llm", mock_enabled=mock_enabled)
         self.anthropic_api_key = anthropic_api_key
+        self.nvidia_api_key = nvidia_api_key
+        self.cloud_url = cloud_url.rstrip("/")
+        self.cloud_llm_model = cloud_llm_model
         self._openai_client = None
+        self._cloud_client = None
         self._anthropic_client = None
+        self._cloud_available: Optional[bool] = None
 
     def health_check(self) -> bool:
         """Check NIM LLM availability via /v1/models endpoint (OpenAI-compat)."""
@@ -44,8 +53,35 @@ class LlamaLLMClient(BaseNIMClient):
         except Exception:
             return False
 
+    def cloud_health_check(self) -> bool:
+        """Check NVIDIA cloud NIM availability."""
+        if not self.nvidia_api_key:
+            return False
+        try:
+            import requests
+            resp = requests.get(
+                f"{self.cloud_url}/models",
+                headers={"Authorization": f"Bearer {self.nvidia_api_key}"},
+                timeout=10,
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def is_cloud_available(self) -> bool:
+        """Check if NVIDIA cloud NIM is available (cached)."""
+        import time
+        now = time.time()
+        if self._cloud_available is None or (now - self._last_check) > self._check_interval:
+            self._cloud_available = self.cloud_health_check()
+            if self._cloud_available:
+                logger.info(f"NVIDIA Cloud NIM LLM available at {self.cloud_url}")
+            else:
+                logger.debug("NVIDIA Cloud NIM LLM not available")
+        return self._cloud_available
+
     def _get_openai_client(self):
-        """Lazy-initialize the OpenAI client for NIM."""
+        """Lazy-initialize the OpenAI client for local NIM."""
         if self._openai_client is None:
             try:
                 from openai import OpenAI
@@ -57,6 +93,20 @@ class LlamaLLMClient(BaseNIMClient):
                 logger.warning("openai package not installed; NIM LLM unavailable")
                 return None
         return self._openai_client
+
+    def _get_cloud_client(self):
+        """Lazy-initialize the OpenAI client for NVIDIA cloud NIM."""
+        if self._cloud_client is None and self.nvidia_api_key:
+            try:
+                from openai import OpenAI
+                self._cloud_client = OpenAI(
+                    base_url=self.cloud_url,
+                    api_key=self.nvidia_api_key,
+                )
+            except ImportError:
+                logger.warning("openai package not installed; cloud NIM unavailable")
+                return None
+        return self._cloud_client
 
     def _get_anthropic_client(self):
         """Lazy-initialize the Anthropic client."""
@@ -73,6 +123,75 @@ class LlamaLLMClient(BaseNIMClient):
                 return None
         return self._anthropic_client
 
+    def _cloud_generate(
+        self,
+        messages: List[Dict],
+        temperature: float = 0.1,
+        max_tokens: int = 2048,
+    ) -> Optional[str]:
+        """Generate text via NVIDIA cloud NIM endpoint.
+
+        Uses OpenAI-compatible API at integrate.api.nvidia.com.
+
+        Args:
+            messages: List of message dicts with "role" and "content" keys.
+            temperature: Sampling temperature.
+            max_tokens: Maximum response tokens.
+
+        Returns:
+            Generated text string, or None if cloud generation fails.
+        """
+        client = self._get_cloud_client()
+        if client is None:
+            return None
+
+        try:
+            response = client.chat.completions.create(
+                model=self.cloud_llm_model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            text = response.choices[0].message.content
+            logger.info(
+                f"Cloud NIM LLM ({self.cloud_llm_model}) generated {len(text)} chars "
+                f"({response.usage.total_tokens} tokens)"
+            )
+            return text
+        except Exception as e:
+            logger.error(f"Cloud NIM LLM generation failed: {e}")
+            return None
+
+    def _cloud_generate_stream(
+        self,
+        messages: List[Dict],
+        temperature: float = 0.1,
+    ) -> Optional[Generator[str, None, None]]:
+        """Stream text via NVIDIA cloud NIM endpoint.
+
+        Args:
+            messages: List of message dicts.
+            temperature: Sampling temperature.
+
+        Returns:
+            Generator yielding text chunks, or None if streaming fails.
+        """
+        client = self._get_cloud_client()
+        if client is None:
+            return None
+
+        try:
+            stream = client.chat.completions.create(
+                model=self.cloud_llm_model,
+                messages=messages,
+                temperature=temperature,
+                stream=True,
+            )
+            return stream
+        except Exception as e:
+            logger.error(f"Cloud NIM LLM streaming failed: {e}")
+            return None
+
     def generate(
         self,
         messages: List[Dict],
@@ -81,8 +200,8 @@ class LlamaLLMClient(BaseNIMClient):
     ) -> str:
         """Generate a text response from the LLM.
 
-        Attempts NIM Llama-3 first, then falls back to Anthropic Claude,
-        then to mock if all else fails.
+        Attempts local NIM Llama-3 first, then NVIDIA cloud NIM,
+        then Anthropic Claude, then mock if all else fails.
 
         Args:
             messages: List of message dicts with "role" and "content" keys.
@@ -93,7 +212,7 @@ class LlamaLLMClient(BaseNIMClient):
         Returns:
             Generated text response string.
         """
-        # Attempt 1: NIM Llama-3
+        # Attempt 1: Local NIM Llama-3
         if self.is_available():
             try:
                 client = self._get_openai_client()
@@ -113,7 +232,13 @@ class LlamaLLMClient(BaseNIMClient):
             except Exception as e:
                 logger.error(f"NIM LLM generation failed: {e}")
 
-        # Attempt 2: Anthropic Claude
+        # Attempt 2: NVIDIA Cloud NIM
+        if self.nvidia_api_key:
+            cloud_result = self._cloud_generate(messages, temperature, max_tokens)
+            if cloud_result is not None:
+                return cloud_result
+
+        # Attempt 3: Anthropic Claude
         if self.anthropic_api_key:
             try:
                 client = self._get_anthropic_client()
@@ -152,13 +277,14 @@ class LlamaLLMClient(BaseNIMClient):
             except Exception as e:
                 logger.error(f"Anthropic Claude generation failed: {e}")
 
-        # Attempt 3: Mock
+        # Attempt 4: Mock
         if self.mock_enabled:
-            logger.info("Using mock LLM response (no NIM or Claude available)")
+            logger.info("Using mock LLM response (no NIM, cloud, or Claude available)")
             return self._mock_response(messages=messages)
 
         raise ConnectionError(
-            "LLM unavailable: NIM unreachable, no Anthropic API key, and mock disabled"
+            "LLM unavailable: local NIM unreachable, cloud NIM failed, "
+            "no Anthropic API key, and mock disabled"
         )
 
     def generate_stream(
@@ -168,8 +294,9 @@ class LlamaLLMClient(BaseNIMClient):
     ) -> Generator[str, None, None]:
         """Stream a text response from the LLM token by token.
 
-        Attempts NIM Llama-3 streaming first, then Anthropic Claude
-        streaming, then yields mock response in chunks.
+        Attempts local NIM Llama-3 streaming first, then NVIDIA cloud NIM
+        streaming, then Anthropic Claude streaming, then yields mock
+        response in chunks.
 
         Args:
             messages: List of message dicts with "role" and "content" keys.
@@ -178,7 +305,7 @@ class LlamaLLMClient(BaseNIMClient):
         Yields:
             Text chunks as they are generated.
         """
-        # Attempt 1: NIM Llama-3 streaming
+        # Attempt 1: Local NIM Llama-3 streaming
         if self.is_available():
             try:
                 client = self._get_openai_client()
@@ -196,7 +323,20 @@ class LlamaLLMClient(BaseNIMClient):
             except Exception as e:
                 logger.error(f"NIM LLM streaming failed: {e}")
 
-        # Attempt 2: Anthropic Claude streaming
+        # Attempt 2: NVIDIA Cloud NIM streaming
+        if self.nvidia_api_key:
+            try:
+                stream = self._cloud_generate_stream(messages, temperature)
+                if stream is not None:
+                    logger.info(f"Streaming via NVIDIA Cloud NIM ({self.cloud_llm_model})")
+                    for chunk in stream:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            yield chunk.choices[0].delta.content
+                    return
+            except Exception as e:
+                logger.error(f"Cloud NIM LLM streaming failed: {e}")
+
+        # Attempt 3: Anthropic Claude streaming
         if self.anthropic_api_key:
             try:
                 client = self._get_anthropic_client()
@@ -229,9 +369,9 @@ class LlamaLLMClient(BaseNIMClient):
             except Exception as e:
                 logger.error(f"Anthropic Claude streaming failed: {e}")
 
-        # Attempt 3: Mock streaming
+        # Attempt 4: Mock streaming
         if self.mock_enabled:
-            logger.info("Using mock LLM streaming (no NIM or Claude available)")
+            logger.info("Using mock LLM streaming (no NIM, cloud, or Claude available)")
             mock_text = self._mock_response(messages=messages)
             # Yield word by word to simulate streaming
             words = mock_text.split(" ")
@@ -240,8 +380,25 @@ class LlamaLLMClient(BaseNIMClient):
             return
 
         raise ConnectionError(
-            "LLM unavailable: NIM unreachable, no Anthropic API key, and mock disabled"
+            "LLM unavailable: local NIM unreachable, cloud NIM failed, "
+            "no Anthropic API key, and mock disabled"
         )
+
+    def get_status(self) -> str:
+        """Return service status string.
+
+        Returns "available" for local NIM, "cloud" for NVIDIA cloud NIM,
+        "mock" for mock mode, or "unavailable".
+        """
+        if self.is_available():
+            return "available"
+        if self.nvidia_api_key and self.is_cloud_available():
+            return "cloud"
+        if self.anthropic_api_key:
+            return "anthropic"
+        if self.mock_enabled:
+            return "mock"
+        return "unavailable"
 
     def _mock_response(self, **kwargs) -> str:
         """Return a template clinical response string.

@@ -3,6 +3,8 @@
 VILA-M3 (Visual Language Model for Medical 3D) provides visual question
 answering, report generation, and zero-shot classification on medical
 images using a Llama-3 backbone with visual encoding.
+
+Fallback chain: local VILA-M3 NIM -> NVIDIA cloud Llama 3.2 Vision -> mock
 """
 
 import base64
@@ -10,6 +12,7 @@ import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import requests
 from loguru import logger
 
 from src.models import VLMResponse
@@ -25,10 +28,52 @@ class VILAM3Client(BaseNIMClient):
       - Visual question answering on radiology images
       - Structured radiology report generation
       - Zero-shot image classification
+
+    Fallback chain:
+      1. Local VILA-M3 NIM endpoint
+      2. NVIDIA Cloud NIM (Llama-3.2-11B-Vision via integrate.api.nvidia.com)
+      3. Mock response (if mock_enabled)
     """
 
-    def __init__(self, base_url: str, mock_enabled: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        mock_enabled: bool = True,
+        nvidia_api_key: Optional[str] = None,
+        cloud_url: str = "https://integrate.api.nvidia.com/v1",
+        cloud_vlm_model: str = "meta/llama-3.2-11b-vision-instruct",
+    ):
         super().__init__(base_url, service_name="vila_m3", mock_enabled=mock_enabled)
+        self.nvidia_api_key = nvidia_api_key
+        self.cloud_url = cloud_url.rstrip("/")
+        self.cloud_vlm_model = cloud_vlm_model
+        self._cloud_available: Optional[bool] = None
+
+    def cloud_health_check(self) -> bool:
+        """Check NVIDIA cloud VLM NIM availability."""
+        if not self.nvidia_api_key:
+            return False
+        try:
+            resp = requests.get(
+                f"{self.cloud_url}/models",
+                headers={"Authorization": f"Bearer {self.nvidia_api_key}"},
+                timeout=10,
+            )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def is_cloud_available(self) -> bool:
+        """Check if NVIDIA cloud VLM NIM is available (cached)."""
+        import time
+        now = time.time()
+        if self._cloud_available is None or (now - self._last_check) > self._check_interval:
+            self._cloud_available = self.cloud_health_check()
+            if self._cloud_available:
+                logger.info(f"NVIDIA Cloud NIM VLM available at {self.cloud_url}")
+            else:
+                logger.debug("NVIDIA Cloud NIM VLM not available")
+        return self._cloud_available
 
     def _encode_image(self, image_path: str) -> str:
         """Read and base64-encode an image file."""
@@ -37,6 +82,19 @@ class VILAM3Client(BaseNIMClient):
             raise FileNotFoundError(f"Image not found: {image_path}")
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
+
+    def _get_mime_type(self, image_path: str) -> str:
+        """Determine MIME type from file extension."""
+        ext = Path(image_path).suffix.lower()
+        mime_map = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".dcm": "application/dicom",
+            ".nii": "application/octet-stream",
+            ".nii.gz": "application/octet-stream",
+        }
+        return mime_map.get(ext, "image/png")
 
     def _build_vlm_payload(
         self,
@@ -47,18 +105,7 @@ class VILAM3Client(BaseNIMClient):
     ) -> Dict[str, Any]:
         """Build an OpenAI-compatible chat completion payload with image."""
         image_b64 = self._encode_image(image_path)
-
-        # Determine MIME type from extension
-        ext = Path(image_path).suffix.lower()
-        mime_map = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".dcm": "application/dicom",
-            ".nii": "application/octet-stream",
-            ".nii.gz": "application/octet-stream",
-        }
-        mime_type = mime_map.get(ext, "image/png")
+        mime_type = self._get_mime_type(image_path)
 
         return {
             "model": "vila-m3",
@@ -82,6 +129,148 @@ class VILAM3Client(BaseNIMClient):
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
+    def _build_cloud_vlm_payload(
+        self,
+        image_path: str,
+        prompt: str,
+        temperature: float = 0.1,
+        max_tokens: int = 1024,
+    ) -> Dict[str, Any]:
+        """Build payload for NVIDIA cloud Llama 3.2 Vision endpoint.
+
+        Uses OpenAI vision API compatible format with base64 image.
+        """
+        image_b64 = self._encode_image(image_path)
+        mime_type = self._get_mime_type(image_path)
+
+        return {
+            "model": self.cloud_vlm_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt,
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{mime_type};base64,{image_b64}"
+                            },
+                        },
+                    ],
+                }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+    def _cloud_analyze(
+        self,
+        image_path: str,
+        prompt: str,
+        temperature: float = 0.1,
+        max_tokens: int = 1024,
+    ) -> Optional[Dict[str, Any]]:
+        """Call NVIDIA cloud VLM endpoint for image analysis.
+
+        Args:
+            image_path: Path to the image file.
+            prompt: Text prompt for the VLM.
+            temperature: Sampling temperature.
+            max_tokens: Maximum response tokens.
+
+        Returns:
+            OpenAI-compatible response dict, or None on failure.
+        """
+        if not self.nvidia_api_key:
+            return None
+
+        try:
+            payload = self._build_cloud_vlm_payload(
+                image_path, prompt, temperature, max_tokens
+            )
+
+            resp = requests.post(
+                f"{self.cloud_url}/chat/completions",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {self.nvidia_api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=120,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+
+            content = ""
+            if "choices" in result and len(result["choices"]) > 0:
+                content = result["choices"][0].get("message", {}).get("content", "")
+
+            logger.info(
+                f"Cloud NIM VLM ({self.cloud_vlm_model}) generated {len(content)} chars"
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Cloud NIM VLM request failed: {e}")
+            return None
+
+    def _invoke_or_mock(
+        self, endpoint: str, payload: Dict, timeout: int = 120, **mock_kwargs
+    ) -> Any:
+        """Try local NIM, then cloud NIM, then fall back to mock.
+
+        Extends the base class to add cloud NIM as a middle fallback.
+        """
+        # Attempt 1: Local NIM
+        if self.is_available():
+            try:
+                return self._request(endpoint, payload, timeout)
+            except Exception as e:
+                logger.error(f"NIM {self.service_name} request failed: {e}")
+
+        # Attempt 2: NVIDIA Cloud NIM
+        if self.nvidia_api_key:
+            image_path = mock_kwargs.get("image_path")
+            question = mock_kwargs.get("question", "")
+            mode = mock_kwargs.get("mode", "vqa")
+
+            if image_path and Path(image_path).exists():
+                # Build the prompt based on mode
+                if mode == "report":
+                    prompt = (
+                        "You are an expert radiologist. Generate a structured "
+                        "radiology report for this medical image. Include sections: "
+                        "TECHNIQUE, COMPARISON, FINDINGS, IMPRESSION."
+                    )
+                    findings_context = mock_kwargs.get("findings_context", "")
+                    if findings_context:
+                        prompt += f"\n\nAdditional clinical context:\n{findings_context}"
+                elif mode == "classify":
+                    labels = mock_kwargs.get("labels", [])
+                    labels_str = ", ".join(f'"{lbl}"' for lbl in labels)
+                    prompt = (
+                        f"Classify this medical image into one of: [{labels_str}]. "
+                        f"Provide confidence scores 0.0-1.0 for each in JSON format."
+                    )
+                else:
+                    prompt = question if question else "Describe this medical image."
+
+                cloud_result = self._cloud_analyze(image_path, prompt)
+                if cloud_result is not None:
+                    return cloud_result
+
+        # Attempt 3: Mock
+        if self.mock_enabled:
+            logger.info(f"Using mock for {self.service_name} (local and cloud unavailable)")
+            return self._mock_response(**mock_kwargs)
+
+        raise ConnectionError(
+            f"NIM {self.service_name} unavailable: local NIM unreachable, "
+            f"cloud NIM failed, and mock disabled"
+        )
 
     def analyze_image(
         self,
@@ -120,12 +309,18 @@ class VILAM3Client(BaseNIMClient):
             if "choices" in result and len(result["choices"]) > 0:
                 answer = result["choices"][0].get("message", {}).get("content", "")
 
+            # Determine the model name for tracking
+            model_name = result.get("model", "")
+            if not model_name:
+                model_name = "vila-m3"
+            is_cloud = self.cloud_vlm_model in str(model_name)
+
             findings = [s.strip() + "." for s in answer.split(".") if s.strip()]
             return VLMResponse(
                 answer=answer,
                 findings=findings[:5],
                 confidence=result.get("confidence", 0.0),
-                model="vila-m3",
+                model=f"cloud:{self.cloud_vlm_model}" if is_cloud else "vila-m3",
                 is_mock=False,
             )
 
@@ -254,6 +449,20 @@ class VILAM3Client(BaseNIMClient):
         logger.warning("Could not extract classification scores, returning uniform")
         uniform = 1.0 / len(labels) if labels else 0.0
         return {lbl: uniform for lbl in labels}
+
+    def get_status(self) -> str:
+        """Return service status string.
+
+        Returns "available" for local NIM, "cloud" for NVIDIA cloud NIM,
+        "mock" for mock mode, or "unavailable".
+        """
+        if self.is_available():
+            return "available"
+        if self.nvidia_api_key and self.is_cloud_available():
+            return "cloud"
+        if self.mock_enabled:
+            return "mock"
+        return "unavailable"
 
     def _mock_response(self, **kwargs) -> VLMResponse:
         """Return a realistic mock VLMResponse.
