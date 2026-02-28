@@ -22,7 +22,7 @@
 # Date:   February 2026
 # =============================================================================
 
-version: "3.8"
+# version removed (obsolete in Compose v2)
 
 services:
   # ── etcd (Milvus metadata store) ──────────────────────────────────────────
@@ -74,7 +74,7 @@ services:
 
   # ── Milvus Standalone ────────────────────────────────────────────────────
   milvus-standalone:
-    image: milvusdb/milvus:v2.4-latest
+    image: milvusdb/milvus:v2.4.17
     container_name: imaging-milvus-standalone
     command: ["milvus", "run", "standalone"]
     security_opt:
@@ -139,7 +139,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     command:
       - uvicorn
-      - api.server:app
+      - api.main:app
       - --host=0.0.0.0
       - --port=8524
       - --workers=2
@@ -147,7 +147,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8524/health"]
       interval: 30s
       timeout: 10s
-      start-period: 30s
+      start_period: 30s
       retries: 3
     depends_on:
       milvus-standalone:

@@ -173,8 +173,8 @@ async def vista3d_segment(request: SegmentRequest):
     try:
         client = nim_manager.vista3d
         result = client.segment(
-            input_path=request.input_path or "",
-            target_classes=request.target_classes,
+            ct_volume_path=request.input_path or "",
+            classes=request.target_classes if request.target_classes else None,
         )
 
         return SegmentResponse(
@@ -234,14 +234,17 @@ async def vilam3_analyze(request: AnalyzeRequest):
 
     try:
         client = nim_manager.vilam3
-        result = client.analyze(
+        result = client.analyze_image(
+            image_path=request.input_path or "",
             question=request.question,
-            input_path=request.input_path or "",
         )
 
+        findings = result.findings if result.findings else [
+            s.strip() for s in result.answer.split(".") if s.strip()
+        ]
         return AnalyzeResponse(
             answer=result.answer,
-            findings=result.findings,
+            findings=findings[:5],
             confidence=result.confidence,
             inference_time_ms=(time.time() - start) * 1000,
             model=result.model,

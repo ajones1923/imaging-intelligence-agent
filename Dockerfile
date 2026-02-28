@@ -65,10 +65,11 @@ COPY data/      /app/data/
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 
-# Create non-root user
-RUN useradd -r -s /bin/false imaginguser \
+# Create non-root user with home directory for HuggingFace cache
+RUN useradd -r -m -s /bin/false imaginguser \
     && mkdir -p /app/data/cache /app/data/reference /app/data/dicom \
-    && chown -R imaginguser:imaginguser /app
+    && mkdir -p /home/imaginguser/.cache/huggingface \
+    && chown -R imaginguser:imaginguser /app /home/imaginguser
 USER imaginguser
 
 # Expose Streamlit and FastAPI ports

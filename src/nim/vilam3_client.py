@@ -120,12 +120,12 @@ class VILAM3Client(BaseNIMClient):
             if "choices" in result and len(result["choices"]) > 0:
                 answer = result["choices"][0].get("message", {}).get("content", "")
 
+            findings = [s.strip() + "." for s in answer.split(".") if s.strip()]
             return VLMResponse(
                 answer=answer,
-                question=question,
-                image_path=image_path,
+                findings=findings[:5],
                 confidence=result.get("confidence", 0.0),
-                model_name="vila-m3",
+                model="vila-m3",
                 is_mock=False,
             )
 
@@ -314,11 +314,15 @@ class VILAM3Client(BaseNIMClient):
 
         logger.info(f"Mock VILA-M3 response generated ({mode} mode)")
 
+        # Build findings list from the answer text
+        findings_list = [s.strip() for s in answer.split("\n") if s.strip() and s.strip() != "-"]
+        if not findings_list:
+            findings_list = [s.strip() + "." for s in answer.split(".") if s.strip()]
+
         return VLMResponse(
             answer=answer,
-            question=question,
-            image_path=image_path,
+            findings=findings_list[:5],
             confidence=round(random.uniform(0.70, 0.95), 3),
-            model_name="vila-m3-mock",
+            model="vila-m3-mock",
             is_mock=True,
         )
