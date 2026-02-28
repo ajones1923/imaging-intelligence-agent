@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+!.env.example
+
+# Data
+data/cache/
+data/sample_images/*.nii.gz
+data/sample_images/*.dcm
+*.nii.gz
+*.dcm
+
+# Models
+*.pth
+*.pt
+*.onnx
+*.safetensors
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
