@@ -18,6 +18,7 @@ from .benchmark_parser import BenchmarkIngestPipeline
 from .guideline_parser import GuidelineIngestPipeline
 from .report_template_parser import ReportTemplateIngestPipeline
 from .dataset_parser import DatasetIngestPipeline
+from .dicom_watcher import DicomWatcher
 
 __all__ = [
     "BaseIngestPipeline",
@@ -31,4 +32,5 @@ __all__ = [
     "GuidelineIngestPipeline",
     "ReportTemplateIngestPipeline",
     "DatasetIngestPipeline",
+    "DicomWatcher",
 ]

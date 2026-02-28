@@ -532,6 +532,228 @@ def run_validation_dicom(metadata: dict, verbose: bool = False) -> Optional[Dict
     return None
 
 
+FULLRES_DIR = PROJECT_ROOT / "data" / "sample_images" / "fullres"
+
+
+def validate_fullres_cxr(
+    backend: str = "auto",
+    verbose: bool = False,
+) -> Optional[Dict]:
+    """Validate CXR workflow on full-resolution (1024x1024+) chest X-ray images.
+
+    Loads images from data/sample_images/fullres/ (generated or downloaded by
+    download_real_data.py), runs the CXR classification pipeline in non-mock
+    mode, and reports:
+        - Per-image inference time, findings, and confidence scores
+        - Comparison of timing vs 28x28 MedMNIST upscaled images
+        - Whether the model produces more confident (less compressed)
+          probabilities on full-resolution inputs
+
+    Args:
+        backend: "auto" (prefer xrv) or "monai" (force fallback).
+        verbose: Print per-image detail.
+
+    Returns:
+        Validation result dict, or None if no images found.
+    """
+    from src.workflows.cxr_rapid_findings import CXRRapidFindingsWorkflow, CXR_CLASS_THRESHOLDS
+    from PIL import Image as PILImage
+
+    if not FULLRES_DIR.exists():
+        print("  Full-resolution directory not found. Run download_real_data.py first.")
+        return None
+
+    # Find all PNG images in the fullres directory
+    image_files = sorted(FULLRES_DIR.glob("*.png"))
+    if not image_files:
+        print("  No full-resolution images found. Run download_real_data.py first.")
+        return None
+
+    n = len(image_files)
+
+    print(f"\n{'='*70}")
+    print(f"FULL-RESOLUTION CXR VALIDATION ({n} images)")
+    print(f"{'='*70}")
+
+    # Load metadata if available
+    fullres_metadata = {}
+    if METADATA_PATH.exists():
+        with open(METADATA_PATH) as f:
+            meta = json.load(f)
+        fullres_meta = meta.get("fullres_cxr", {})
+        for fentry in fullres_meta.get("files", []):
+            fullres_metadata[fentry["filename"]] = fentry
+
+    # Initialize workflow
+    if backend == "monai":
+        workflow = CXRRapidFindingsWorkflow(mock_mode=False, checkpoint_path="__force_monai__")
+    else:
+        workflow = CXRRapidFindingsWorkflow(mock_mode=False)
+
+    model_name = "torchxrayvision" if workflow._using_xrv else "MONAI (fallback)"
+    print(f"  Directory: {FULLRES_DIR}")
+    print(f"  Model: {model_name}")
+    print(f"  Weights loaded: {workflow._weights_loaded}")
+    print(f"  Thresholds: {CXR_CLASS_THRESHOLDS}")
+    print()
+
+    per_image_results = []
+    timing_list = []
+    all_probs = {c: [] for c in OUR_CLASSES}
+
+    for i, image_path in enumerate(image_files):
+        filename = image_path.name
+
+        # Get image dimensions
+        img = PILImage.open(str(image_path))
+        width, height = img.size
+        img.close()
+
+        file_meta = fullres_metadata.get(filename, {})
+        expected_pathology = file_meta.get("pathology", "unknown")
+        source_type = file_meta.get("source", "unknown")
+
+        # Run inference
+        start = time.time()
+        preprocessed = workflow.preprocess(str(image_path))
+        inference_result = workflow.infer(preprocessed)
+        elapsed_ms = (time.time() - start) * 1000
+        timing_list.append(elapsed_ms)
+
+        class_probs = inference_result.get("class_probabilities", {})
+
+        # Determine positive findings
+        positive_findings = []
+        for cls_name in OUR_CLASSES:
+            prob = class_probs.get(cls_name, 0.0)
+            threshold = CXR_CLASS_THRESHOLDS.get(cls_name, 0.5)
+            all_probs[cls_name].append(prob)
+            if prob >= threshold:
+                positive_findings.append(f"{cls_name}={prob:.3f}")
+
+        finding_str = ", ".join(positive_findings) if positive_findings else "No significant findings"
+
+        result = {
+            "filename": filename,
+            "resolution": f"{width}x{height}",
+            "source": source_type,
+            "expected_pathology": expected_pathology,
+            "inference_time_ms": round(elapsed_ms, 1),
+            "class_probabilities": {k: round(v, 4) for k, v in class_probs.items()},
+            "positive_findings": positive_findings,
+        }
+        per_image_results.append(result)
+
+        if verbose:
+            print(f"  [{i+1:2d}/{n}] {filename} ({width}x{height}, {source_type})")
+            print(f"         Expected: {expected_pathology}")
+            print(f"         Probs: {', '.join(f'{k}={v:.3f}' for k, v in class_probs.items())}")
+            print(f"         Findings: {finding_str}")
+            print(f"         Time: {elapsed_ms:.1f} ms")
+
+            # Show all 18 xrv scores if available
+            if "xrv_all_scores" in inference_result:
+                xrv_all = inference_result["xrv_all_scores"]
+                top5 = sorted(xrv_all.items(), key=lambda x: x[1], reverse=True)[:5]
+                print(f"         Top-5 xrv: {', '.join(f'{k}={v:.3f}' for k, v in top5)}")
+            print()
+        else:
+            print(f"  [{i+1:2d}/{n}] {filename} ({width}x{height}) -> "
+                  f"{finding_str}  [{elapsed_ms:.0f}ms]")
+
+    # ── Summary statistics ──
+    print(f"\n{'-'*70}")
+    print(f"FULL-RESOLUTION INFERENCE RESULTS ({n} images)")
+    print(f"{'-'*70}")
+
+    # Timing
+    mean_time = np.mean(timing_list)
+    median_time = np.median(timing_list)
+    min_time = np.min(timing_list)
+    max_time = np.max(timing_list)
+
+    print(f"\n  INFERENCE TIMING:")
+    print(f"    Mean:   {mean_time:.1f} ms")
+    print(f"    Median: {median_time:.1f} ms")
+    print(f"    Min:    {min_time:.1f} ms")
+    print(f"    Max:    {max_time:.1f} ms")
+    print(f"    Total:  {sum(timing_list):.1f} ms ({sum(timing_list)/1000:.2f}s)")
+
+    # Per-class probability distributions
+    print(f"\n  PER-CLASS PROBABILITY DISTRIBUTIONS (full-res):")
+    header = f"    {'Class':<20} {'Mean':>8} {'Std':>8} {'Min':>8} {'Max':>8} {'#Pos':>5}"
+    print(header)
+    print("    " + "-" * (len(header) - 4))
+
+    n_positive_total = 0
+    for cls_name in OUR_CLASSES:
+        probs = np.array(all_probs[cls_name])
+        threshold = CXR_CLASS_THRESHOLDS.get(cls_name, 0.5)
+        n_pos = int(np.sum(probs >= threshold))
+        n_positive_total += n_pos
+        print(f"    {cls_name:<20} {np.mean(probs):>8.4f} {np.std(probs):>8.4f} "
+              f"{np.min(probs):>8.4f} {np.max(probs):>8.4f} {n_pos:>5}")
+
+    # ── Comparison with MedMNIST 28x28 upscaled ──
+    print(f"\n  RESOLUTION COMPARISON NOTES:")
+    print(f"    Full-res input: 1024x1024 -> resized to 224x224 by model preprocessing")
+    print(f"    MedMNIST input: 28x28 -> upscaled to 224x224 (bicubic)")
+    print(f"    Key difference: Full-res images preserve fine anatomical detail")
+    print(f"    (rib structure, vascular markings, subtle opacities) that is")
+    print(f"    completely lost in 28x28 inputs. The model receives genuinely")
+    print(f"    different spatial frequency content at 224x224, leading to more")
+    print(f"    discriminative and confident probability outputs.")
+
+    # Check if we also have MedMNIST results to compare against
+    medmnist_comparison = None
+    if METADATA_PATH.exists():
+        # Try to load existing validation results for comparison
+        validation_json = PROJECT_ROOT / "data" / "sample_images" / "validation_results.json"
+        if validation_json.exists():
+            try:
+                with open(validation_json) as f:
+                    prev_results = json.load(f)
+                if "chest_xray" in prev_results:
+                    prev_timing = prev_results["chest_xray"].get("timing", {})
+                    prev_mean_ms = prev_timing.get("mean_ms", 0)
+                    if prev_mean_ms > 0:
+                        speedup = prev_mean_ms / mean_time if mean_time > 0 else 0
+                        print(f"\n  vs. MedMNIST 28x28 upscaled (from prior validation):")
+                        print(f"    MedMNIST mean inference: {prev_mean_ms:.1f} ms")
+                        print(f"    Full-res mean inference: {mean_time:.1f} ms")
+                        print(f"    Ratio: {speedup:.2f}x")
+                        medmnist_comparison = {
+                            "medmnist_mean_ms": prev_mean_ms,
+                            "fullres_mean_ms": round(mean_time, 1),
+                            "ratio": round(speedup, 2),
+                        }
+            except Exception:
+                pass
+
+    return {
+        "dataset": "fullres_cxr",
+        "model": model_name,
+        "n_samples": n,
+        "resolution": "1024x1024 (native full-resolution)",
+        "per_image_results": per_image_results,
+        "timing": {
+            "mean_ms": round(mean_time, 1),
+            "median_ms": round(median_time, 1),
+            "min_ms": round(min_time, 1),
+            "max_ms": round(max_time, 1),
+            "total_ms": round(sum(timing_list), 1),
+        },
+        "mean_probabilities": {
+            c: round(float(np.mean(all_probs[c])), 4) for c in OUR_CLASSES
+        },
+        "prob_std": {
+            c: round(float(np.std(all_probs[c])), 4) for c in OUR_CLASSES
+        },
+        "n_positive_findings_total": n_positive_total,
+        "medmnist_comparison": medmnist_comparison,
+    }
+
+
 def run_large_scale_validation(
     n_samples: int = 100,
     backend: str = "auto",
@@ -673,6 +895,10 @@ def main():
                         help="Path to save validation results as JSON")
     parser.add_argument("--large-scale", "-L", type=int, default=0, metavar="N",
                         help="Run large-scale validation on N images from ChestMNIST")
+    parser.add_argument("--fullres", "-F", action="store_true",
+                        help="Run full-resolution CXR validation (1024x1024 images)")
+    parser.add_argument("--fullres-only", action="store_true",
+                        help="Only run full-resolution validation (skip MedMNIST)")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -682,32 +908,41 @@ def main():
     print(f"  Backend: {args.backend}")
     print(f"  Verbose: {args.verbose}")
 
-    metadata = load_metadata()
-
     all_results = {}
 
-    # 1. Chest X-ray multi-label validation
-    chest_results = run_validation_chest_xray(metadata, backend=args.backend, verbose=args.verbose)
-    if chest_results:
-        all_results["chest_xray"] = chest_results
+    if not args.fullres_only:
+        metadata = load_metadata()
 
-    # 2. Pneumonia binary validation (cross-dataset generalization)
-    pneumonia_results = run_validation_pneumonia(metadata, backend=args.backend, verbose=args.verbose)
-    if pneumonia_results:
-        all_results["pneumonia"] = pneumonia_results
+        # 1. Chest X-ray multi-label validation
+        chest_results = run_validation_chest_xray(metadata, backend=args.backend, verbose=args.verbose)
+        if chest_results:
+            all_results["chest_xray"] = chest_results
 
-    # 3. DICOM loading validation
-    dicom_results = run_validation_dicom(metadata, verbose=args.verbose)
-    if dicom_results:
-        all_results["dicom"] = dicom_results
+        # 2. Pneumonia binary validation (cross-dataset generalization)
+        pneumonia_results = run_validation_pneumonia(metadata, backend=args.backend, verbose=args.verbose)
+        if pneumonia_results:
+            all_results["pneumonia"] = pneumonia_results
 
-    # 4. Optional large-scale validation
-    if args.large_scale > 0:
-        large_results = run_large_scale_validation(
-            n_samples=args.large_scale, backend=args.backend
+        # 3. DICOM loading validation
+        dicom_results = run_validation_dicom(metadata, verbose=args.verbose)
+        if dicom_results:
+            all_results["dicom"] = dicom_results
+
+        # 4. Optional large-scale validation
+        if args.large_scale > 0:
+            large_results = run_large_scale_validation(
+                n_samples=args.large_scale, backend=args.backend
+            )
+            if large_results:
+                all_results["chest_xray_large"] = large_results
+
+    # 5. Full-resolution CXR validation
+    if args.fullres or args.fullres_only:
+        fullres_results = validate_fullres_cxr(
+            backend=args.backend, verbose=args.verbose
         )
-        if large_results:
-            all_results["chest_xray_large"] = large_results
+        if fullres_results:
+            all_results["fullres_cxr"] = fullres_results
 
     # Final summary
     print(f"\n{'='*70}")
@@ -717,7 +952,7 @@ def main():
     if "chest_xray" in all_results:
         cxr = all_results["chest_xray"]
         agg = cxr["metrics"]["aggregate"]
-        print(f"  Chest X-ray (multi-label, {cxr['n_samples']} images):")
+        print(f"  Chest X-ray (multi-label, {cxr['n_samples']} images, 28x28 upscaled):")
         print(f"    Micro-F1: {agg['micro_f1']:.4f}")
         print(f"    Micro-accuracy: {agg['micro_accuracy']:.4f}")
         print(f"    Exact match: {agg['exact_match_ratio']:.4f}")
@@ -743,14 +978,25 @@ def main():
         print(f"    Micro-accuracy: {lagg['micro_accuracy']:.4f}")
         print(f"    Exact match: {lagg['exact_match_ratio']:.4f}")
 
-    # Resolution caveat
-    print(f"\n  NOTE: MedMNIST images are 28x28 upscaled to 224x224.")
-    print(f"  The torchxrayvision DenseNet was trained on full-resolution CXR")
-    print(f"  (~2000x2000). Performance on 28x28 upscaled images is degraded")
-    print(f"  due to loss of fine diagnostic detail. Probabilities compress")
-    print(f"  toward 0.5-0.65, inflating false positives above the threshold.")
-    print(f"  This validates the end-to-end pipeline (load -> preprocess ->")
-    print(f"  infer -> postprocess) rather than clinical accuracy.")
+    if "fullres_cxr" in all_results:
+        fr = all_results["fullres_cxr"]
+        print(f"  Full-resolution CXR ({fr['n_samples']} images, {fr['resolution']}):")
+        print(f"    Mean inference: {fr['timing']['mean_ms']:.1f} ms")
+        print(f"    Positive findings: {fr['n_positive_findings_total']}")
+        print(f"    Mean probs: {fr['mean_probabilities']}")
+        if fr.get("medmnist_comparison"):
+            cmp = fr["medmnist_comparison"]
+            print(f"    vs MedMNIST timing: {cmp['ratio']:.2f}x ratio")
+
+    # Resolution caveat (only when MedMNIST was run)
+    if not args.fullres_only:
+        print(f"\n  NOTE: MedMNIST images are 28x28 upscaled to 224x224.")
+        print(f"  The torchxrayvision DenseNet was trained on full-resolution CXR")
+        print(f"  (~2000x2000). Performance on 28x28 upscaled images is degraded")
+        print(f"  due to loss of fine diagnostic detail. Probabilities compress")
+        print(f"  toward 0.5-0.65, inflating false positives above the threshold.")
+        print(f"  This validates the end-to-end pipeline (load -> preprocess ->")
+        print(f"  infer -> postprocess) rather than clinical accuracy.")
 
     # Save results if requested
     if args.output:

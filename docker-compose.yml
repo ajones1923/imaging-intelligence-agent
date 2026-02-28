@@ -3,6 +3,7 @@
 # HCLS AI Factory / ai_agent_adds / imaging_intelligence_agent
 #
 # Services:
+#   orthanc                  Orthanc DICOM server + web viewer (ports 8042, 4242)
 #   milvus-etcd              etcd key-value store for Milvus metadata
 #   milvus-minio             MinIO object storage for Milvus log/index data
 #   milvus-standalone        Milvus 2.4 vector database (ports 19530, 9091)
@@ -26,6 +27,29 @@
 version: "3.8"
 
 services:
+  # ── Orthanc DICOM Server ──────────────────────────────────────────────────
+  orthanc:
+    image: orthancteam/orthanc:24.12.1
+    container_name: imaging-orthanc
+    ports:
+      - "8042:8042"               # REST API + Web viewer
+      - "4242:4242"               # DICOM (C-STORE SCP)
+    environment:
+      ORTHANC__NAME: "Imaging Intelligence Agent PACS"
+      ORTHANC__DICOM_AET: "IMAGING_AI"
+      ORTHANC__REGISTERED_USERS: |
+        {"admin": "orthanc"}
+    volumes:
+      - orthanc_data:/var/lib/orthanc/db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8042/system"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - imaging-network
+    restart: unless-stopped
+
   # ── etcd (Milvus metadata store) ──────────────────────────────────────────
   milvus-etcd:
     image: quay.io/coreos/etcd:v3.5.5
@@ -144,6 +168,9 @@ services:
       IMAGING_NIM_VISTA3D_URL: "http://nim-vista3d:8000"
       IMAGING_NIM_MAISI_URL: "http://nim-maisi:8000"
       IMAGING_NIM_VILAM3_URL: "http://nim-vilam3:8000"
+      IMAGING_ORTHANC_URL: "http://orthanc:8042"
+      IMAGING_ORTHANC_USERNAME: "admin"
+      IMAGING_ORTHANC_PASSWORD: "orthanc"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       NGC_API_KEY: ${NGC_API_KEY}
     command:
@@ -306,6 +333,8 @@ services:
 
 # ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
+  orthanc_data:
+    driver: local
   etcd_data:
     driver: local
   minio_data:

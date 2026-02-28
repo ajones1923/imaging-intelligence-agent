@@ -111,11 +111,20 @@ class ImagingSettings(BaseSettings):
     CITATION_HIGH_THRESHOLD: float = 0.75
     CITATION_MEDIUM_THRESHOLD: float = 0.60
 
-    # ── Phase 2 Hooks (disabled) ──
-    DICOM_SERVER_URL: str = "http://localhost:8042"
+    # ── Orthanc DICOM Server ──
+    ORTHANC_URL: str = "http://localhost:8042"
+    ORTHANC_USERNAME: str = "admin"
+    ORTHANC_PASSWORD: str = "orthanc"
+    DICOM_AUTO_INGEST: bool = False
+    DICOM_WATCH_INTERVAL: int = 5  # seconds between Orthanc /changes polls
+
+    # ── Cross-Modal ──
     CROSS_MODAL_ENABLED: bool = False
 
-    model_config = {"env_prefix": "IMAGING_", "env_file": ".env"}
+    # ── Legacy alias (kept for backward compat) ──
+    DICOM_SERVER_URL: str = "http://localhost:8042"
+
+    model_config = {"env_prefix": "IMAGING_", "env_file": ".env", "extra": "ignore"}
 
 
 settings = ImagingSettings()
