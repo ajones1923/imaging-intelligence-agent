@@ -143,6 +143,8 @@ class ImagingIntelligenceAgent:
         kwargs = {}
         if plan.modalities and len(plan.modalities) == 1:
             kwargs["modality_filter"] = plan.modalities[0]
+        if plan.body_regions and len(plan.body_regions) == 1:
+            kwargs["body_region_filter"] = plan.body_regions[0]
 
         if plan.search_strategy == "comparative":
             comp = self.rag.retrieve_comparative(query.question, **kwargs)

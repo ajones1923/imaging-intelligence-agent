@@ -33,12 +33,14 @@ class LlamaLLMClient(BaseNIMClient):
         nvidia_api_key: Optional[str] = None,
         cloud_url: str = "https://integrate.api.nvidia.com/v1",
         cloud_llm_model: str = "meta/llama-3.1-8b-instruct",
+        local_llm_model: str = "meta/llama3-70b-instruct",
     ):
         super().__init__(base_url, service_name="llm", mock_enabled=mock_enabled)
         self.anthropic_api_key = anthropic_api_key
         self.nvidia_api_key = nvidia_api_key
         self.cloud_url = cloud_url.rstrip("/")
         self.cloud_llm_model = cloud_llm_model
+        self.local_llm_model = local_llm_model
         self._openai_client = None
         self._cloud_client = None
         self._anthropic_client = None
@@ -218,7 +220,7 @@ class LlamaLLMClient(BaseNIMClient):
                 client = self._get_openai_client()
                 if client is not None:
                     response = client.chat.completions.create(
-                        model="meta/llama3-70b-instruct",
+                        model=self.local_llm_model,
                         messages=messages,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -311,7 +313,7 @@ class LlamaLLMClient(BaseNIMClient):
                 client = self._get_openai_client()
                 if client is not None:
                     stream = client.chat.completions.create(
-                        model="meta/llama3-70b-instruct",
+                        model=self.local_llm_model,
                         messages=messages,
                         temperature=temperature,
                         stream=True,

@@ -74,6 +74,7 @@ class NIMServiceManager:
             nvidia_api_key=resolved_nvidia_key,
             cloud_url=cloud_url,
             cloud_llm_model=cloud_llm_model,
+            local_llm_model=getattr(settings, "NIM_LOCAL_LLM_MODEL", "meta/llama3-70b-instruct"),
         )
 
         logger.info("NIM Service Manager initialized")

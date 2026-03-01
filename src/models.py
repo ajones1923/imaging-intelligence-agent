@@ -7,7 +7,7 @@ Follows the same dataclass/Pydantic pattern as:
   - ai_agent_adds/cart_intelligence_agent/src/models.py (CAR-T Agent)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -475,6 +475,8 @@ class SegmentationResult(BaseModel):
     volumes: Dict[str, float] = Field(default_factory=dict)  # class -> volume_ml
     num_classes: int = 0
     inference_time_ms: float = 0.0
+    segmentation_mask_path: Optional[str] = None
+    model_name: str = "vista3d"
     model: str = "vista3d"
     is_mock: bool = False
 
@@ -598,4 +600,4 @@ class AgentResponse(BaseModel):
     nim_services_used: List[str] = Field(default_factory=list)
     knowledge_used: List[str] = Field(default_factory=list)
     cross_modal: Optional[CrossModalResult] = None
-    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))

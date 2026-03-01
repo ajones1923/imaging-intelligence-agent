@@ -121,6 +121,15 @@ class ImagingSettings(BaseSettings):
     # ── Cross-Modal ──
     CROSS_MODAL_ENABLED: bool = False
 
+    # ── CORS ──
+    CORS_ORIGINS: str = "*"
+
+    # ── Request Limits ──
+    MAX_REQUEST_SIZE_MB: int = 10
+
+    # ── Local NIM LLM Model Name ──
+    NIM_LOCAL_LLM_MODEL: str = "meta/llama3-70b-instruct"
+
     # ── Legacy alias (kept for backward compat) ──
     DICOM_SERVER_URL: str = "http://localhost:8042"
 

@@ -12,8 +12,9 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel, Field
 from prometheus_client import (
@@ -234,13 +235,26 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from config.settings import settings as _settings
+
+_cors_origins = [o.strip() for o in _settings.CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _limit_request_size(request: Request, call_next):
+    """Reject request bodies that exceed the configured size limit."""
+    content_length = request.headers.get("content-length")
+    max_bytes = _settings.MAX_REQUEST_SIZE_MB * 1024 * 1024
+    if content_length and int(content_length) > max_bytes:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    return await call_next(request)
 
 # Include routers
 app.include_router(meta_agent_router, prefix="/api", tags=["Meta-Agent"])
@@ -352,6 +366,8 @@ async def rag_query(request: QueryRequest):
         kwargs["collections_filter"] = request.collections
     if request.modality:
         kwargs["modality_filter"] = request.modality
+    if request.body_region:
+        kwargs["body_region_filter"] = request.body_region
     if request.year_min:
         kwargs["year_min"] = request.year_min
     if request.year_max:
@@ -405,6 +421,8 @@ async def search_evidence(request: SearchRequest):
         kwargs["collections_filter"] = request.collections
     if request.modality:
         kwargs["modality_filter"] = request.modality
+    if request.body_region:
+        kwargs["body_region_filter"] = request.body_region
     if request.year_min:
         kwargs["year_min"] = request.year_min
     if request.year_max:

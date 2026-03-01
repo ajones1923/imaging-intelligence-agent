@@ -137,6 +137,7 @@ class ImagingRAGEngine:
         year_min: Optional[int] = None,
         year_max: Optional[int] = None,
         modality_filter: Optional[str] = None,
+        body_region_filter: Optional[str] = None,
     ) -> CrossCollectionResult:
         """Retrieve evidence from multiple collections."""
         start = time.time()
@@ -155,15 +156,22 @@ class ImagingRAGEngine:
 
         # Build per-collection filters
         filter_exprs = {}
+        # Collections that have a body_region field
+        _has_body_region = {"imaging_literature", "imaging_trials", "imaging_findings",
+                           "imaging_protocols", "imaging_devices", "imaging_anatomy",
+                           "imaging_benchmarks", "imaging_guidelines",
+                           "imaging_report_templates", "imaging_datasets"}
         for coll in collections:
             config = COLLECTION_CONFIG.get(coll, {})
             filters = []
             if modality_filter and config.get("has_modality"):
                 filters.append(f'modality == "{modality_filter}"')
+            if body_region_filter and coll in _has_body_region:
+                filters.append(f'body_region == "{body_region_filter}"')
             if year_min and config.get("year_field"):
-                filters.append(f'{config["year_field"]} >= {year_min}')
+                filters.append(f'{config["year_field"]} >= {int(year_min)}')
             if year_max and config.get("year_field"):
-                filters.append(f'{config["year_field"]} <= {year_max}')
+                filters.append(f'{config["year_field"]} <= {int(year_max)}')
             if filters:
                 filter_exprs[coll] = " and ".join(filters)
 
@@ -225,8 +233,8 @@ class ImagingRAGEngine:
                                   metadata={k: v for k, v in h.items() if k not in ("embedding",)})
                         for h in hits
                     ]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(f"find_related search failed for {coll}: {exc}")
         return results
 
     def retrieve_comparative(self, question: str, **kwargs) -> ComparativeResult:
