@@ -6,7 +6,7 @@ Follows the same Pydantic BaseSettings pattern as rag-chat-pipeline/config/setti
 from pathlib import Path
 from typing import Optional
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ImagingSettings(BaseSettings):
@@ -114,7 +114,7 @@ class ImagingSettings(BaseSettings):
     # ── Orthanc DICOM Server ──
     ORTHANC_URL: str = "http://localhost:8042"
     ORTHANC_USERNAME: str = "admin"
-    ORTHANC_PASSWORD: str = "orthanc"
+    ORTHANC_PASSWORD: str = ""
     DICOM_AUTO_INGEST: bool = False
     DICOM_WATCH_INTERVAL: int = 5  # seconds between Orthanc /changes polls
 
@@ -122,7 +122,7 @@ class ImagingSettings(BaseSettings):
     CROSS_MODAL_ENABLED: bool = False
 
     # ── CORS ──
-    CORS_ORIGINS: str = "*"
+    CORS_ORIGINS: str = "http://localhost:8080,http://localhost:8524,http://localhost:8525"
 
     # ── Request Limits ──
     MAX_REQUEST_SIZE_MB: int = 10
@@ -133,7 +133,13 @@ class ImagingSettings(BaseSettings):
     # ── Legacy alias (kept for backward compat) ──
     DICOM_SERVER_URL: str = "http://localhost:8042"
 
-    model_config = {"env_prefix": "IMAGING_", "env_file": ".env", "extra": "ignore"}
+    model_config = SettingsConfigDict(
+        env_prefix="IMAGING_",
+        case_sensitive=False,
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = ImagingSettings()
