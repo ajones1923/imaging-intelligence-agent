@@ -150,9 +150,7 @@ async def ask(request: AskRequest):
     if request.modality:
         kwargs["modality_filter"] = request.modality
     if request.body_region:
-        # Body region filtering not yet a separate kwarg in retrieve, but
-        # can be included in the query expansion for improved recall
-        pass
+        kwargs["body_region_filter"] = request.body_region
 
     # Build conversation context from history
     conversation_ctx = ""

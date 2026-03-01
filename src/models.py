@@ -483,10 +483,14 @@ class SegmentationResult(BaseModel):
 
 class SyntheticCTResult(BaseModel):
     """Result from MAISI NIM synthetic CT generation."""
+    volume_path: str = ""
+    segmentation_mask_path: Optional[str] = None
     resolution: str = "512x512x512"
     body_region: str = ""
     num_classes_annotated: int = 0
     generation_time_ms: float = 0.0
+    voxel_spacing_mm: List[float] = Field(default_factory=lambda: [1.0, 1.0, 1.0])
+    model_name: str = "maisi"
     model: str = "maisi"
     is_mock: bool = False
 

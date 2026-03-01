@@ -38,7 +38,7 @@ BODY_REGION_EXPANSION = {
 
 PATHOLOGY_EXPANSION = {
     "hemorrhage": {"bleeding", "hematoma", "blood", "hemorrhagic", "haemorrhage", "ich", "intracranial hemorrhage"},
-    "nodule": {"nodular", "pulmonary nodule", "lung nodule", "solitiary pulmonary nodule", "spn"},
+    "nodule": {"nodular", "pulmonary nodule", "lung nodule", "solitary pulmonary nodule", "spn"},
     "mass": {"tumor", "tumour", "lesion", "neoplasm", "malignancy", "cancer", "growth"},
     "fracture": {"broken bone", "fx", "fractures", "break", "cortical disruption"},
     "pneumonia": {"consolidation", "pneumonic", "lung infection", "pneumonitis", "cap", "hap"},

@@ -183,7 +183,7 @@ class ImagingIntelligenceAgent:
             evidence=evidence,
             workflow_results=workflow_results,
             nim_services_used=nim_services_used,
-            knowledge_used=[k for k in ["pathology", "modality", "anatomy"] if evidence.knowledge_context],
+            knowledge_used=[k for k in ["pathology", "modality", "anatomy"] if k in (evidence.knowledge_context or "").lower()],
             cross_modal=cross_modal_result,
         )
 
