@@ -1,7 +1,7 @@
 # Imaging Intelligence Agent -- NIM Integration Guide
 
 **Author:** Adam Jones
-**Date:** February 2026
+**Date:** March 2026
 **Version:** 1.0.0
 
 ---

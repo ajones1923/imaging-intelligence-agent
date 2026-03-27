@@ -1,7 +1,7 @@
 # Imaging Intelligence Agent -- Architecture Guide
 
 **Author:** Adam Jones
-**Date:** February 2026
+**Date:** March 2026
 **Version:** 1.0.0
 
 ---
@@ -55,9 +55,9 @@ The Imaging Intelligence Agent is organized into six interconnected layers, each
 |  | Knowledge Graph            |   | Query Expansion             |        |
 |  | src/knowledge.py           |   | src/query_expansion.py      |        |
 |  |                            |   |                             |        |
-|  | - 15 pathologies           |   | - Domain-specific maps      |        |
-|  | - 8 modalities             |   | - Keyword -> term expansion |        |
-|  | - 15 anatomy entries       |   | - Entity resolution         |        |
+|  | - 25 pathologies           |   | - Domain-specific maps      |        |
+|  | - 9 modalities             |   | - Keyword -> term expansion |        |
+|  | - 21 anatomy entries       |   | - Entity resolution         |        |
 |  +----------------------------+   +-----------------------------+        |
 +=========================================================================+
                     |                            |

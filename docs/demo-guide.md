@@ -78,18 +78,18 @@ Expected response:
 {
   "status": "healthy",
   "collections": {
-    "imaging_literature": 50,
-    "imaging_trials": 40,
-    "imaging_findings": 50,
-    "imaging_protocols": 40,
-    "imaging_devices": 50,
-    "imaging_anatomy": 30,
-    "imaging_benchmarks": 40,
-    "imaging_guidelines": 40,
-    "imaging_report_templates": 50,
-    "imaging_datasets": 50
+    "imaging_literature": 100,
+    "imaging_trials": 80,
+    "imaging_findings": 100,
+    "imaging_protocols": 80,
+    "imaging_devices": 96,
+    "imaging_anatomy": 60,
+    "imaging_benchmarks": 80,
+    "imaging_guidelines": 80,
+    "imaging_report_templates": 100,
+    "imaging_datasets": 100
   },
-  "total_vectors": 440,
+  "total_vectors": 876,
   "nim_services": {
     "vista3d": "mock",
     "maisi": "mock",
@@ -267,13 +267,77 @@ Before starting the live demo, open the following tabs in your browser so you ca
 
 ---
 
+### Step 3b: Emergency CXR (3 minutes)
+
+**Select:** "DEMO-004: Emergency CXR: Bilateral Pneumonia with Sepsis Risk" from the demo case dropdown.
+
+**Expected result:** The clinical scenario populates:
+
+> 45-year-old female presents with high fever (39.8°C), productive cough, bilateral crackles on auscultation, and hypoxia (SpO2 88% on room air). WBC 18,500, Procalcitonin 8.2 ng/mL. CXR ordered stat for pneumonia evaluation and sepsis workup.
+
+**Click:** the **Run** button.
+
+**Expected result:** The workflow executes the `cxr_rapid_findings` pipeline and displays:
+
+- **Primary Finding:** Bilateral consolidation with air bronchograms
+- **Distribution:** Bilateral, predominantly lower lobes
+- **Pattern:** Multifocal consolidation
+- **Associated Findings:** Small bilateral pleural effusions
+- **Sepsis Alert:** Triggered based on clinical markers
+- **Severity Classification:** Critical
+
+**Show:** Genomic enrichment panel linking to infection susceptibility genes:
+
+- **TLR4** -- Toll-like receptor variants affecting innate immune response
+- **MBL2** -- Mannose-binding lectin deficiency increases infection risk
+- **CFTR** -- Cystic fibrosis carrier status affects pulmonary defense
+- **IL6, TNF** -- Cytokine storm risk variants
+- **SERPINA1** -- Alpha-1 antitrypsin deficiency
+
+**Talking points:**
+
+- "AI detected bilateral consolidation and automatically triggered a sepsis alert based on imaging pattern plus clinical markers."
+- "Cross-modal genomic enrichment identifies infection susceptibility genes -- TLR4, MBL2, and CFTR variants."
+- "From CXR to sepsis risk stratification in under 30 seconds."
+
+---
+
+### Step 4: Image Gallery (3 minutes)
+
+**Click:** the **Image Gallery** tab (the third tab).
+
+**Expected result:** A hero banner displays "Medical Imaging AI Detection Showcase" with NVIDIA DGX Spark branding.
+
+**Show:** The CXR AI Detection Showcase with 5 pathology cards:
+- Normal (no findings)
+- Consolidation (pneumonia)
+- Pleural Effusion
+- Cardiomegaly
+- Pneumothorax
+
+Each card shows the AI-annotated image with bounding boxes, severity badges, and measurement annotations. Toggle the "Show AI Annotations" switch to compare raw vs AI-analyzed views.
+
+**Show:** The Cross-Modality AI Showcase section with CT and MRI examples alongside the CXR cases.
+
+**Show:** The 3D Volume Slice Viewer. Select a volume (CT Head, CT Chest, or MRI Brain) and use the slice slider to scroll through the 3D volume. Adjust window center and width for different tissue contrasts.
+
+**Talking points:**
+
+- "These are AI-annotated medical images showing detection overlays, bounding boxes, and measurement annotations."
+- "The before/after toggle demonstrates what AI adds to the raw image -- from nothing visible to precise detection with measurements."
+- "The 3D slice viewer renders NIfTI volumes with adjustable HU windowing -- brain window, lung window, or custom settings."
+
+---
+
 ## Route B: Interactive Exploration (10 minutes)
 
 > **This route demonstrates the breadth of the knowledge base, protocol intelligence, dose optimization, and export capabilities.**
 
-### Step 4: Evidence Explorer (3 minutes)
+### Step 5: Evidence Explorer (3 minutes)
 
 **Click:** the **Evidence Explorer** tab (the first tab).
+
+**Show:** The 4 clickable pre-filled example queries: "What AI models detect hemorrhage?", "Compare CT vs MRI for stroke", "Lung nodule follow-up guidelines", "FDA-cleared AI devices for mammography". Click any to auto-populate the query box.
 
 **Type this query** in the "Ask a question" text input:
 
@@ -312,12 +376,15 @@ Before starting the live demo, open the following tabs in your browser so you ca
 - "One question searched all 10 collections in parallel -- literature, devices, benchmarks, and findings all contributed evidence."
 - "The comparative query was auto-detected. Claude parsed 'CT' and 'MRI' as two entities and ran dual retrieval."
 - "Every claim is backed by a citation with cosine similarity scores."
+- "The Plotly donut chart shows collection contribution -- which knowledge bases provided evidence for this query."
 
 ---
 
-### Step 5: Protocol Advisor (2 minutes)
+### Step 6: Protocol Advisor (2 minutes)
 
-**Click:** the **Protocol Advisor** tab (the third tab).
+**Click:** the **Protocol Advisor** tab (the fourth tab).
+
+**Show:** The 4 clickable example indications for quick selection.
 
 **Type this value** in the clinical indication input:
 
@@ -345,9 +412,9 @@ Before starting the live demo, open the following tabs in your browser so you ca
 
 ---
 
-### Step 6: Dose Intelligence (2 minutes)
+### Step 7: Dose Intelligence (2 minutes)
 
-**Click:** the **Dose Intelligence** tab (the fifth tab).
+**Click:** the **Dose Intelligence** tab (the sixth tab).
 
 **Expected result:** The dose comparison dashboard displays:
 
@@ -368,9 +435,9 @@ Before starting the live demo, open the following tabs in your browser so you ca
 
 ---
 
-### Step 7: Device & AI Ecosystem (1 minute)
+### Step 8: Device & AI Ecosystem (1 minute)
 
-**Click:** the **Device & AI Ecosystem** tab (the fourth tab).
+**Click:** the **Device & AI Ecosystem** tab (the fifth tab).
 
 **Expected result:** A searchable, filterable catalog of AI devices displays with columns for device name, manufacturer, modality, clinical task, regulatory status, and performance metrics.
 
@@ -388,9 +455,9 @@ Before starting the live demo, open the following tabs in your browser so you ca
 
 ---
 
-### Step 8: Reports & Export (2 minutes)
+### Step 9: Reports & Export (2 minutes)
 
-**Click:** the **Reports & Export** tab (the sixth tab).
+**Click:** the **Reports & Export** tab (the seventh tab).
 
 **Click:** the **Generate Report** button to create a report from the last query.
 
@@ -399,6 +466,8 @@ Before starting the live demo, open the following tabs in your browser so you ca
 - **Clinical Question** -- the original query
 - **Analysis** -- Claude-synthesized answer with structured findings
 - **Evidence Citations** -- numbered list with collection badges, document IDs, and relevance scores
+
+**Note:** The Workflow Runner now includes a 6-step pipeline animation and displays annotated AI images alongside clinical metrics.
 
 **Show:** The four export format buttons:
 
@@ -530,16 +599,16 @@ pip install reportlab
 
 | Collection | Purpose | Approx. Vectors |
 |---|---|---|
-| `imaging_literature` | Published research papers and reviews | 50 |
-| `imaging_trials` | ClinicalTrials.gov AI-in-imaging records | 40 |
-| `imaging_findings` | Imaging finding templates and patterns | 50 |
-| `imaging_protocols` | Acquisition protocols and parameters | 40 |
-| `imaging_devices` | FDA-cleared AI/ML medical devices | 50 |
-| `imaging_anatomy` | Anatomical structure references | 30 |
-| `imaging_benchmarks` | Model performance benchmarks | 40 |
-| `imaging_guidelines` | Clinical practice guidelines (ACR, RSNA) | 40 |
-| `imaging_report_templates` | Structured radiology report templates | 50 |
-| `imaging_datasets` | Public imaging datasets (TCIA, PhysioNet) | 50 |
+| `imaging_literature` | Published research papers and reviews | 100 |
+| `imaging_trials` | ClinicalTrials.gov AI-in-imaging records | 80 |
+| `imaging_findings` | Imaging finding templates and patterns | 100 |
+| `imaging_protocols` | Acquisition protocols and parameters | 80 |
+| `imaging_devices` | FDA-cleared AI/ML medical devices | 96 |
+| `imaging_anatomy` | Anatomical structure references | 60 |
+| `imaging_benchmarks` | Model performance benchmarks | 80 |
+| `imaging_guidelines` | Clinical practice guidelines (ACR, RSNA) | 80 |
+| `imaging_report_templates` | Structured radiology report templates | 100 |
+| `imaging_datasets` | Public imaging datasets (TCIA, PhysioNet) | 100 |
 | `genomic_evidence` | Shared genomic variants (read-only, Stage 1) | 3,561,170 |
 
 ### Key curl Examples
