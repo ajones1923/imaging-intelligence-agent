@@ -190,17 +190,17 @@ class ImagingIntelligenceAgent:
     def generate_report(self, response: AgentResponse) -> str:
         """Generate a markdown report from an agent response."""
         lines = [
-            f"# Imaging Intelligence Report",
-            f"",
+            "# Imaging Intelligence Report",
+            "",
             f"**Query:** {response.question}",
             f"**Timestamp:** {response.timestamp}",
-            f"",
-            f"## Answer",
-            f"",
+            "",
+            "## Answer",
+            "",
             response.answer,
-            f"",
-            f"## Evidence Summary",
-            f"",
+            "",
+            "## Evidence Summary",
+            "",
             f"- **Total evidence items:** {response.evidence.hit_count}",
             f"- **Collections searched:** {response.evidence.total_collections_searched}",
             f"- **Search time:** {response.evidence.search_time_ms:.0f} ms",
@@ -208,18 +208,18 @@ class ImagingIntelligenceAgent:
 
         if response.nim_services_used:
             lines.extend([
-                f"",
-                f"## NIM Services Used",
-                f"",
+                "",
+                "## NIM Services Used",
+                "",
             ])
             for nim in response.nim_services_used:
                 lines.append(f"- {nim}")
 
         if response.workflow_results:
             lines.extend([
-                f"",
-                f"## Workflow Results",
-                f"",
+                "",
+                "## Workflow Results",
+                "",
             ])
             for wr in response.workflow_results:
                 lines.append(f"### {wr.workflow_name}")
@@ -232,28 +232,28 @@ class ImagingIntelligenceAgent:
         if response.cross_modal:
             cm = response.cross_modal
             lines.extend([
-                f"",
-                f"## Cross-Modal Genomics Enrichment",
-                f"",
+                "",
+                "## Cross-Modal Genomics Enrichment",
+                "",
                 f"**Trigger:** {cm.trigger_reason}",
                 f"**Genomic hits:** {cm.genomic_hit_count}",
                 f"**Queries executed:** {cm.query_count}",
-                f"",
+                "",
                 cm.enrichment_summary,
             ])
             if cm.genomic_context:
                 lines.extend([
-                    f"",
-                    f"### Genomic Evidence",
-                    f"",
+                    "",
+                    "### Genomic Evidence",
+                    "",
                 ])
                 for ctx in cm.genomic_context[:10]:  # Limit to top 10
                     lines.append(f"- {ctx}")
 
         lines.extend([
-            f"",
-            f"---",
-            f"*Research use only. All findings require clinician review.*",
+            "",
+            "---",
+            "*Research use only. All findings require clinician review.*",
         ])
 
         return "\n".join(lines)

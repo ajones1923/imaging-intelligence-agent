@@ -263,7 +263,7 @@ class CTChestLungNoduleWorkflow(BaseImagingWorkflow):
         from monai.networks.nets import resnet10
 
         backbone = resnet10(spatial_dims=3, n_input_channels=1, feed_forward=False)
-        feature_extractor = monai.apps.detection.networks.retinanet_network.resnet_fpn_feature_extractor(
+        feature_extractor = monai.apps.detection.networks.retinanet_network.resnet_fpn_feature_extractor(  # noqa: F821
             backbone=backbone,
             spatial_dims=3,
             pretrained_backbone=False,

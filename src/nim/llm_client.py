@@ -411,10 +411,9 @@ class LlamaLLMClient(BaseNIMClient):
         messages = kwargs.get("messages", [])
 
         # Extract last user message for context
-        last_user_msg = ""
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                last_user_msg = msg.get("content", "")
+                msg.get("content", "")
                 break
 
         return (

@@ -62,7 +62,7 @@ def export_markdown(response: AgentResponse) -> str:
     """Export response as Markdown string."""
     # (Similar to agent.generate_report but more detailed)
     md = [
-        f"# Imaging Intelligence Report\n",
+        "# Imaging Intelligence Report\n",
         f"**Query:** {response.question}\n",
         f"**Timestamp:** {response.timestamp}\n",
         f"\n## Analysis\n\n{response.answer}\n",
@@ -75,7 +75,7 @@ def export_markdown(response: AgentResponse) -> str:
             md.append(f"- [{hit.id}] (score: {hit.score:.3f}) {hit.text[:200]}...\n")
 
     if response.workflow_results:
-        md.append(f"\n## Workflow Results\n")
+        md.append("\n## Workflow Results\n")
         for wr in response.workflow_results:
             md.append(f"\n### {wr.workflow_name}\n")
             md.append(f"- **Status:** {wr.status.value if hasattr(wr.status, 'value') else wr.status}\n")
@@ -83,21 +83,21 @@ def export_markdown(response: AgentResponse) -> str:
             if wr.classification:
                 md.append(f"- **Classification:** {wr.classification}\n")
             if wr.findings:
-                md.append(f"- **Findings:**\n")
+                md.append("- **Findings:**\n")
                 for finding in wr.findings:
                     desc = finding.get("description", str(finding))
                     md.append(f"  - {desc}\n")
             if wr.measurements:
-                md.append(f"- **Measurements:**\n")
+                md.append("- **Measurements:**\n")
                 for key, value in wr.measurements.items():
                     md.append(f"  - {key}: {value}\n")
 
     if response.nim_services_used:
-        md.append(f"\n## NVIDIA NIM Services Used\n")
+        md.append("\n## NVIDIA NIM Services Used\n")
         for nim in response.nim_services_used:
             md.append(f"- {nim}\n")
 
-    md.append(f"\n---\n*Research use only.*\n")
+    md.append("\n---\n*Research use only.*\n")
     return "".join(md)
 
 

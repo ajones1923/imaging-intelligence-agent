@@ -198,7 +198,7 @@ def render_sidebar(ctx: Optional[Dict]):
             st.warning("Engine not initialized")
             return
 
-        settings = ctx["settings"]
+        ctx["settings"]
         nim_manager = ctx["nim_manager"]
         manager = ctx["manager"]
 

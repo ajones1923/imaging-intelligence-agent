@@ -656,7 +656,7 @@ def _generate_synthetic_cxr(
     elif pathology == "effusion":
         # Meniscus sign: fluid layering at right costophrenic angle
         effusion_level = 0.35  # Upper boundary of effusion
-        effusion_mask = np.clip((y_norm - effusion_level) / 0.15, 0, 1)
+        np.clip((y_norm - effusion_level) / 0.15, 0, 1)
         # Only in right hemithorax
         right_mask = np.exp(-((x_norm + 0.30) ** 2) / (2 * 0.22 ** 2))
         # Meniscus curve (fluid rises at periphery)
@@ -766,7 +766,7 @@ def download_fullres_cxr(output_dir: Path = FULLRES_DIR, count: int = 5) -> dict
         if (output_dir / f["filename"]).exists()
     )
 
-    print(f"\n  Summary:")
+    print("\n  Summary:")
     print(f"    Real downloads: {len(downloaded)}")
     print(f"    Synthetic generated: {len(generated)}")
     print(f"    Total images: {len(all_files)}")

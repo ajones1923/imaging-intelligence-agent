@@ -471,8 +471,8 @@ class VILAM3Client(BaseNIMClient):
         (VQA, report generation, or classification).
         """
         mode = kwargs.get("mode", "vqa")
-        image_path = kwargs.get("image_path", "unknown.png")
-        question = kwargs.get("question", "")
+        kwargs.get("image_path", "unknown.png")
+        kwargs.get("question", "")
 
         if mode == "report":
             answer = (

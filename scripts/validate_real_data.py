@@ -276,7 +276,7 @@ def run_validation_chest_xray(
 
         if verbose:
             gt_names = file_entry.get("label_names", [])
-            pred_names = [OUR_CLASSES[j] for j in range(len(pred_vector)) if pred_vector[j] == 1]
+            [OUR_CLASSES[j] for j in range(len(pred_vector)) if pred_vector[j] == 1]
             match = "OK" if gt_vector == pred_vector else "MISMATCH"
             print(f"  [{i+1:2d}/{n}] {filename}")
             print(f"         GT labels: {gt_names}")
@@ -337,7 +337,7 @@ def run_validation_chest_xray(
     print(f"  Micro-average accuracy:    {agg['micro_accuracy']:.4f}")
     print(f"  Exact match ratio:         {agg['exact_match_ratio']:.4f} ({agg['exact_match_count']}/{agg['total_samples']})")
 
-    print(f"\nINFERENCE TIMING:")
+    print("\nINFERENCE TIMING:")
     print(f"  Mean:   {timing['mean_ms']:.1f} ms")
     print(f"  Median: {timing['median_ms']:.1f} ms")
     print(f"  Min:    {timing['min_ms']:.1f} ms")
@@ -381,7 +381,7 @@ def run_validation_pneumonia(
     print(f"PNEUMONIA VALIDATION (Pediatric CXR, {n} samples)")
     print(f"{'='*70}")
     print(f"  Source: {pneumonia_data.get('source', 'unknown')}")
-    print(f"  Task: Binary classification -> mapped to consolidation detection")
+    print("  Task: Binary classification -> mapped to consolidation detection")
     print()
 
     from src.workflows.cxr_rapid_findings import CXRRapidFindingsWorkflow, CXR_CLASS_THRESHOLDS
@@ -460,8 +460,8 @@ def run_validation_pneumonia(
     accuracy = (tp + tn) / total if total > 0 else 0.0
     f1 = 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 0.0
 
-    print(f"\n  Confusion Matrix:")
-    print(f"                  Predicted Normal  Predicted Pneumonia")
+    print("\n  Confusion Matrix:")
+    print("                  Predicted Normal  Predicted Pneumonia")
     print(f"    GT Normal           {tn:3d}               {fp:3d}")
     print(f"    GT Pneumonia        {fn:3d}               {tp:3d}")
     print(f"\n  Sensitivity (recall): {sensitivity:.4f}")
@@ -520,7 +520,7 @@ def run_validation_dicom(metadata: dict, verbose: bool = False) -> Optional[Dict
             print(f"  Dimensions: {file_info.get('rows', '?')}x{file_info.get('columns', '?')}")
             print(f"  Inference time: {elapsed_ms:.1f} ms")
             print(f"  Predictions: {class_probs}")
-            print(f"  Status: PASS (DICOM loaded and processed successfully)")
+            print("  Status: PASS (DICOM loaded and processed successfully)")
 
             return {"status": "pass", "inference_time_ms": elapsed_ms, "predictions": class_probs}
 
@@ -672,7 +672,7 @@ def validate_fullres_cxr(
     min_time = np.min(timing_list)
     max_time = np.max(timing_list)
 
-    print(f"\n  INFERENCE TIMING:")
+    print("\n  INFERENCE TIMING:")
     print(f"    Mean:   {mean_time:.1f} ms")
     print(f"    Median: {median_time:.1f} ms")
     print(f"    Min:    {min_time:.1f} ms")
@@ -680,7 +680,7 @@ def validate_fullres_cxr(
     print(f"    Total:  {sum(timing_list):.1f} ms ({sum(timing_list)/1000:.2f}s)")
 
     # Per-class probability distributions
-    print(f"\n  PER-CLASS PROBABILITY DISTRIBUTIONS (full-res):")
+    print("\n  PER-CLASS PROBABILITY DISTRIBUTIONS (full-res):")
     header = f"    {'Class':<20} {'Mean':>8} {'Std':>8} {'Min':>8} {'Max':>8} {'#Pos':>5}"
     print(header)
     print("    " + "-" * (len(header) - 4))
@@ -695,14 +695,14 @@ def validate_fullres_cxr(
               f"{np.min(probs):>8.4f} {np.max(probs):>8.4f} {n_pos:>5}")
 
     # ── Comparison with MedMNIST 28x28 upscaled ──
-    print(f"\n  RESOLUTION COMPARISON NOTES:")
-    print(f"    Full-res input: 1024x1024 -> resized to 224x224 by model preprocessing")
-    print(f"    MedMNIST input: 28x28 -> upscaled to 224x224 (bicubic)")
-    print(f"    Key difference: Full-res images preserve fine anatomical detail")
-    print(f"    (rib structure, vascular markings, subtle opacities) that is")
-    print(f"    completely lost in 28x28 inputs. The model receives genuinely")
-    print(f"    different spatial frequency content at 224x224, leading to more")
-    print(f"    discriminative and confident probability outputs.")
+    print("\n  RESOLUTION COMPARISON NOTES:")
+    print("    Full-res input: 1024x1024 -> resized to 224x224 by model preprocessing")
+    print("    MedMNIST input: 28x28 -> upscaled to 224x224 (bicubic)")
+    print("    Key difference: Full-res images preserve fine anatomical detail")
+    print("    (rib structure, vascular markings, subtle opacities) that is")
+    print("    completely lost in 28x28 inputs. The model receives genuinely")
+    print("    different spatial frequency content at 224x224, leading to more")
+    print("    discriminative and confident probability outputs.")
 
     # Check if we also have MedMNIST results to compare against
     medmnist_comparison = None
@@ -718,7 +718,7 @@ def validate_fullres_cxr(
                     prev_mean_ms = prev_timing.get("mean_ms", 0)
                     if prev_mean_ms > 0:
                         speedup = prev_mean_ms / mean_time if mean_time > 0 else 0
-                        print(f"\n  vs. MedMNIST 28x28 upscaled (from prior validation):")
+                        print("\n  vs. MedMNIST 28x28 upscaled (from prior validation):")
                         print(f"    MedMNIST mean inference: {prev_mean_ms:.1f} ms")
                         print(f"    Full-res mean inference: {mean_time:.1f} ms")
                         print(f"    Ratio: {speedup:.2f}x")
@@ -861,17 +861,17 @@ def run_large_scale_validation(
         print(f"    {class_name:<20} TP={m['tp']:3d} FP={m['fp']:3d} TN={m['tn']:3d} FN={m['fn']:3d}  "
               f"Sens={sens}  Spec={spec}  F1={f1}")
 
-    print(f"\n  AGGREGATE:")
+    print("\n  AGGREGATE:")
     print(f"    Micro-F1: {agg['micro_f1']:.4f}")
     print(f"    Micro-accuracy: {agg['micro_accuracy']:.4f}")
     print(f"    Exact match: {agg['exact_match_ratio']:.4f} ({agg['exact_match_count']}/{n_samples})")
     print(f"    Mean inference: {np.mean(timing_list):.0f} ms ({np.sum(timing_list)/1000:.1f}s total)")
 
     # Print resolution caveat
-    print(f"\n  NOTE: These images are 28x28 upscaled to 224x224. The model was")
-    print(f"  trained on full-resolution CXR (~2000x2000). Low resolution causes")
-    print(f"  probability compression toward 0.5-0.65, inflating false positives.")
-    print(f"  Full-resolution validation would yield significantly better metrics.")
+    print("\n  NOTE: These images are 28x28 upscaled to 224x224. The model was")
+    print("  trained on full-resolution CXR (~2000x2000). Low resolution causes")
+    print("  probability compression toward 0.5-0.65, inflating false positives.")
+    print("  Full-resolution validation would yield significantly better metrics.")
 
     return {
         "dataset": "chest_xray_large",
@@ -990,13 +990,13 @@ def main():
 
     # Resolution caveat (only when MedMNIST was run)
     if not args.fullres_only:
-        print(f"\n  NOTE: MedMNIST images are 28x28 upscaled to 224x224.")
-        print(f"  The torchxrayvision DenseNet was trained on full-resolution CXR")
-        print(f"  (~2000x2000). Performance on 28x28 upscaled images is degraded")
-        print(f"  due to loss of fine diagnostic detail. Probabilities compress")
-        print(f"  toward 0.5-0.65, inflating false positives above the threshold.")
-        print(f"  This validates the end-to-end pipeline (load -> preprocess ->")
-        print(f"  infer -> postprocess) rather than clinical accuracy.")
+        print("\n  NOTE: MedMNIST images are 28x28 upscaled to 224x224.")
+        print("  The torchxrayvision DenseNet was trained on full-resolution CXR")
+        print("  (~2000x2000). Performance on 28x28 upscaled images is degraded")
+        print("  due to loss of fine diagnostic detail. Probabilities compress")
+        print("  toward 0.5-0.65, inflating false positives above the threshold.")
+        print("  This validates the end-to-end pipeline (load -> preprocess ->")
+        print("  infer -> postprocess) rather than clinical accuracy.")
 
     # Save results if requested
     if args.output:
