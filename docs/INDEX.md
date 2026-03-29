@@ -58,7 +58,7 @@ Built on the HCLS AI Factory platform:
 - **UI:** 9-tab Streamlit Imaging Workbench (port 8525)
 - **API:** FastAPI (port 8524)
 - **Export:** Markdown, JSON, PDF, FHIR R4 DiagnosticReport Bundle
-- **Hardware target:** NVIDIA DGX Spark ($3,999)
+- **Hardware target:** NVIDIA DGX Spark ($4,699)
 
 ## Knowledge Base
 

@@ -1769,4 +1769,4 @@ All services join `imaging-network`. Docker DNS resolves service names
 ---
 
 *Last updated: March 2026*
-*Imaging Intelligence Agent v1.0.0 — HCLS AI Factory*
+*Imaging Intelligence Agent v1.3.0 — HCLS AI Factory*

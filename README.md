@@ -309,4 +309,4 @@ Apache 2.0
 
 - **Adam Jones** -- Architecture and implementation
 - Part of the **HCLS AI Factory** platform
-- Built on NVIDIA DGX Spark ($3,999)
+- Built on NVIDIA DGX Spark ($4,699)
